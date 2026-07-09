@@ -1,0 +1,24 @@
+[project]
+name = "tearsheet"
+version = "0.0.0"
+description = "A long-horizon multi-agent system that produces verified, sourced company due-diligence briefs."
+requires-python = ">=3.11"
+# Kept intentionally minimal for the M0 walking skeleton.
+# Dependencies are added per-step: yfinance (Step 3), an LLM SDK (Step 4),
+# langsmith (Step 5), langgraph (M2+). See PLAN.md.
+dependencies = [
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# Treat src/ as an importable package tree so `python -m src.agent.run` works.
+include = ["src*"]
