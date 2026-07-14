@@ -1,0 +1,30 @@
+{
+  "ticker": "MSFT",
+  "company": "Microsoft Corporation",
+  "period": "FY2024",
+  "period_end": "2024-06-30",
+  "source": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/msft-20240630.htm",
+  "facts": [
+    {
+      "fact": "revenue",
+      "value": 245122,
+      "unit": "USD_millions",
+      "match": "relative",
+      "tolerance": 0.01
+    },
+    {
+      "fact": "net_income",
+      "value": 88136,
+      "unit": "USD_millions",
+      "match": "relative",
+      "tolerance": 0.01
+    },
+    {
+      "fact": "gross_margin",
+      "value": 69.76,
+      "unit": "percent",
+      "match": "absolute_pp",
+      "tolerance": 0.5
+    }
+  ]
+}
