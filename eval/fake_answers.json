@@ -1,0 +1,12 @@
+{
+  "_comment": "Calibration fixture: hand-written answers with KNOWN verdicts, used to prove the scorer works before any agent exists. AAPL revenue = correct but rounded+different unit (tests normalization). AAPL net_income = hallucination. AAPL gross_margin = correct within 0.5pp. MSFT revenue = correct exact. MSFT net_income = missing. MSFT gross_margin = hallucination. Expected: completion 5/6=83.3%, fact_accuracy 3/6=50%, hallucination 2/5=40%.",
+  "AAPL": {
+    "revenue": {"value": 391.0, "unit": "USD_billions"},
+    "net_income": {"value": 100000, "unit": "USD_millions"},
+    "gross_margin": {"value": 46.0, "unit": "percent"}
+  },
+  "MSFT": {
+    "revenue": {"value": 245122, "unit": "USD_millions"},
+    "gross_margin": {"value": 75.0, "unit": "percent"}
+  }
+}
