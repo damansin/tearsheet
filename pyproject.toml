@@ -8,6 +8,7 @@ requires-python = ">=3.11"
 # langsmith (Step 5), langgraph (M2+). See PLAN.md.
 dependencies = [
     "python-dotenv",
+    "yfinance",
 ]
 
 [project.optional-dependencies]
