@@ -9,6 +9,7 @@ requires-python = ">=3.11"
 dependencies = [
     "python-dotenv",
     "yfinance",
+    "anthropic",
 ]
 
 [project.optional-dependencies]
