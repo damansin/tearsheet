@@ -1,0 +1,30 @@
+{
+  "AAPL": {
+    "revenue": {
+      "value": 416161.0,
+      "unit": "USD_millions"
+    },
+    "net_income": {
+      "value": 112010.0,
+      "unit": "USD_millions"
+    },
+    "gross_margin": {
+      "value": 46.91,
+      "unit": "percent"
+    }
+  },
+  "MSFT": {
+    "revenue": {
+      "value": 281724.0,
+      "unit": "USD_millions"
+    },
+    "net_income": {
+      "value": 101832.0,
+      "unit": "USD_millions"
+    },
+    "gross_margin": {
+      "value": 68.82,
+      "unit": "percent"
+    }
+  }
+}
