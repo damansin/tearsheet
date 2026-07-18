@@ -17,6 +17,8 @@ import json
 
 import anthropic
 from dotenv import load_dotenv
+from langsmith import traceable
+from langsmith.wrappers import wrap_anthropic
 
 from src.tools.market_data import get_financials
 
@@ -41,6 +43,7 @@ def _extract_json(text: str) -> dict:
     return json.loads(text[start : end + 1])
 
 
+@traceable(run_type="chain", name="naive_agent")
 def run_naive(ticker: str) -> dict:
     """Return {fact: {value, unit}} for one company — the scorer's answer shape."""
     fin = get_financials(ticker)  # latest period, naively used as-is
@@ -54,7 +57,9 @@ def run_naive(ticker: str) -> dict:
         "Produce the JSON."
     )
 
-    client = anthropic.Anthropic()
+    # wrap_anthropic auto-logs the LLM call (prompt, response, tokens, latency,
+    # cost) as its own span inside the trace.
+    client = wrap_anthropic(anthropic.Anthropic())
     resp = client.messages.create(
         model=MODEL,
         max_tokens=512,

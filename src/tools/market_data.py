@@ -17,6 +17,7 @@ so period mismatches are visible rather than silent.
 from dataclasses import dataclass
 
 import yfinance as yf
+from langsmith import traceable
 
 # yfinance row labels we depend on. If Yahoo renames one, this is the single
 # place that breaks — not the whole agent.
@@ -58,6 +59,7 @@ def _cell(income_stmt, label: str, column) -> float:
     return float(value)
 
 
+@traceable(run_type="tool")
 def get_financials(ticker: str) -> Financials:
     """Fetch the most recent annual financials for `ticker`."""
     try:
