@@ -1,6 +1,9 @@
 """Calibration test: the scorer must reproduce the known verdicts of the
 hand-written fake answers. If this fails, the measuring instrument is broken
 and no downstream metric can be trusted.
+
+Uses a FIXED inline ground-truth fixture, not the live benchmark — so the
+scorer's calibration stays locked even as the real benchmark grows/changes.
 """
 
 import json
@@ -13,9 +16,35 @@ sys.path.insert(0, str(ROOT / "eval"))
 from run_eval import load_ground_truth, score  # noqa: E402
 
 
+def _fact(name, value, unit, match, tol):
+    return {"fact": name, "value": value, "unit": unit, "match": match, "tolerance": tol}
+
+
+# Fixed 2-company / 3-fact fixture the fake answers were designed against.
+TRUTH = {
+    "AAPL": {"ticker": "AAPL", "facts": [
+        _fact("revenue", 391035, "USD_millions", "relative", 0.01),
+        _fact("net_income", 93736, "USD_millions", "relative", 0.01),
+        _fact("gross_margin", 46.21, "percent", "absolute_pp", 0.5),
+    ]},
+    "MSFT": {"ticker": "MSFT", "facts": [
+        _fact("revenue", 245122, "USD_millions", "relative", 0.01),
+        _fact("net_income", 88136, "USD_millions", "relative", 0.01),
+        _fact("gross_margin", 69.76, "percent", "absolute_pp", 0.5),
+    ]},
+}
+
+
 def _scored():
     answers = json.loads((ROOT / "eval" / "fake_answers.json").read_text())
-    return score(load_ground_truth(), answers)
+    return score(TRUTH, answers)
+
+
+def test_live_benchmark_loads():
+    """The real benchmark still parses and every company has facts."""
+    truth = load_ground_truth()
+    assert len(truth) >= 20
+    assert all(company["facts"] for company in truth.values())
 
 
 def test_metrics_match_designed_verdicts():

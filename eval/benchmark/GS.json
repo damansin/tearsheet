@@ -1,0 +1,38 @@
+{
+  "ticker": "GS",
+  "company": "GOLDMAN SACHS GROUP INC",
+  "sector": "financial",
+  "period": "FY2024",
+  "period_end": "2024-12-31",
+  "source": "",
+  "facts": [
+    {
+      "fact": "revenue",
+      "value": 53512.0,
+      "unit": "USD_millions",
+      "match": "relative",
+      "tolerance": 0.01
+    },
+    {
+      "fact": "net_income",
+      "value": 14276.0,
+      "unit": "USD_millions",
+      "match": "relative",
+      "tolerance": 0.01
+    },
+    {
+      "fact": "net_margin",
+      "value": 26.68,
+      "unit": "percent",
+      "match": "absolute_pp",
+      "tolerance": 0.5
+    },
+    {
+      "fact": "equity",
+      "value": 121996.0,
+      "unit": "USD_millions",
+      "match": "relative",
+      "tolerance": 0.01
+    }
+  ]
+}

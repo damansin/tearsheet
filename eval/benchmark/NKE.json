@@ -1,49 +1,49 @@
 {
-  "ticker": "AAPL",
-  "company": "Apple Inc.",
-  "sector": "tech",
+  "ticker": "NKE",
+  "company": "NIKE, Inc.",
+  "sector": "consumer",
   "period": "FY2024",
-  "period_end": "2024-09-28",
-  "source": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+  "period_end": "2024-05-31",
+  "source": "https://www.sec.gov/Archives/edgar/data/320187/000032018724000044/nke-20240531.htm",
   "facts": [
     {
       "fact": "revenue",
-      "value": 391035.0,
+      "value": 51362.0,
       "unit": "USD_millions",
       "match": "relative",
       "tolerance": 0.01
     },
     {
       "fact": "net_income",
-      "value": 93736.0,
+      "value": 5700.0,
       "unit": "USD_millions",
       "match": "relative",
       "tolerance": 0.01
     },
     {
       "fact": "net_margin",
-      "value": 23.97,
+      "value": 11.1,
       "unit": "percent",
       "match": "absolute_pp",
       "tolerance": 0.5
     },
     {
       "fact": "equity",
-      "value": 56950.0,
+      "value": 14430.0,
       "unit": "USD_millions",
       "match": "relative",
       "tolerance": 0.01
     },
     {
       "fact": "gross_margin",
-      "value": 46.21,
+      "value": 44.56,
       "unit": "percent",
       "match": "absolute_pp",
       "tolerance": 0.5
     },
     {
       "fact": "cash",
-      "value": 29943.0,
+      "value": 9860.0,
       "unit": "USD_millions",
       "match": "relative",
       "tolerance": 0.01

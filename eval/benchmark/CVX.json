@@ -1,0 +1,38 @@
+{
+  "ticker": "CVX",
+  "company": "CHEVRON CORP",
+  "sector": "energy",
+  "period": "FY2024",
+  "period_end": "2024-12-31",
+  "source": "https://www.sec.gov/Archives/edgar/data/93410/000009341025000009/cvx-20241231.htm",
+  "facts": [
+    {
+      "fact": "revenue",
+      "value": 193414.0,
+      "unit": "USD_millions",
+      "match": "relative",
+      "tolerance": 0.01
+    },
+    {
+      "fact": "net_income",
+      "value": 17661.0,
+      "unit": "USD_millions",
+      "match": "relative",
+      "tolerance": 0.01
+    },
+    {
+      "fact": "net_margin",
+      "value": 9.13,
+      "unit": "percent",
+      "match": "absolute_pp",
+      "tolerance": 0.5
+    },
+    {
+      "fact": "equity",
+      "value": 152318.0,
+      "unit": "USD_millions",
+      "match": "relative",
+      "tolerance": 0.01
+    }
+  ]
+}

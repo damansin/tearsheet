@@ -1,49 +1,35 @@
 {
-  "ticker": "MSFT",
-  "company": "MICROSOFT CORP",
-  "sector": "tech",
+  "ticker": "PG",
+  "company": "PROCTER & GAMBLE Co",
+  "sector": "consumer",
   "period": "FY2024",
   "period_end": "2024-06-30",
-  "source": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/msft-20240630.htm",
+  "source": "https://www.sec.gov/Archives/edgar/data/80424/000008042424000083/pg-20240630.htm",
   "facts": [
     {
       "fact": "revenue",
-      "value": 245122.0,
+      "value": 84039.0,
       "unit": "USD_millions",
       "match": "relative",
       "tolerance": 0.01
     },
     {
       "fact": "net_income",
-      "value": 88136.0,
+      "value": 14879.0,
       "unit": "USD_millions",
       "match": "relative",
       "tolerance": 0.01
     },
     {
       "fact": "net_margin",
-      "value": 35.96,
+      "value": 17.7,
       "unit": "percent",
       "match": "absolute_pp",
       "tolerance": 0.5
     },
     {
       "fact": "equity",
-      "value": 268477.0,
-      "unit": "USD_millions",
-      "match": "relative",
-      "tolerance": 0.01
-    },
-    {
-      "fact": "gross_margin",
-      "value": 69.76,
-      "unit": "percent",
-      "match": "absolute_pp",
-      "tolerance": 0.5
-    },
-    {
-      "fact": "cash",
-      "value": 18315.0,
+      "value": 50559.0,
       "unit": "USD_millions",
       "match": "relative",
       "tolerance": 0.01

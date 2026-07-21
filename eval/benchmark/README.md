@@ -1,49 +1,73 @@
 # Benchmark ground truth
 
-One JSON file per company. Facts are hand-curated from the company's SEC 10-K
-filing (the source of record) — deliberately **not** from yfinance, so the
-ground truth stays independent of the data source the agent reads.
+25 companies, one JSON per company, pinned to **the fiscal period ending in
+calendar 2024** (each company's FY2024). Facts come from **SEC XBRL**
+(`data.sec.gov`) — the actual filed numbers — so ground truth stays independent
+of yfinance (the agent's data source). Regenerate with:
+
+```bash
+python eval/build_ground_truth.py
+```
 
 ## Schema
 
 ```jsonc
 {
-  "ticker": "AAPL",           // the benchmark key
+  "ticker": "AAPL",
   "company": "Apple Inc.",
-  "period": "FY2024",          // facts are PINNED to a filing period, never "latest"
-  "period_end": "2024-09-28",  // fiscal year end date
-  "source": "https://...",     // the 10-K on SEC EDGAR — every fact traces here
+  "sector": "tech",
+  "period": "FY2024",
+  "period_end": "2024-09-28",   // pin to the DATE, not the "FY" label (see below)
+  "source": "https://www.sec.gov/Archives/edgar/data/320193/.../aapl-20240928.htm",
   "facts": [
-    {
-      "fact": "revenue",        // key the agent's output must provide
-      "value": 391035,          // ground-truth value
-      "unit": "USD_millions",   // scorer normalizes units before comparing
-      "match": "relative",      // how to compare (see below)
-      "tolerance": 0.01
-    }
+    { "fact": "revenue", "value": 391035.0, "unit": "USD_millions",
+      "match": "relative", "tolerance": 0.01 }
   ]
 }
 ```
 
-## Match types
+## The 6-fact set (per-company subset)
 
-| `match`       | Meaning                                   | Typical use                       |
-|---------------|-------------------------------------------|-----------------------------------|
-| `relative`    | |agent − truth| / truth ≤ tolerance       | reported figures (revenue, NI); ±1% absorbs rounding, still catches hallucinations |
-| `absolute_pp` | |agent − truth| ≤ tolerance (in points)   | percentages (margins); ±0.5pp     |
+| Fact | Unit | Match | Tol | Source |
+|---|---|---|---|---|
+| revenue | USD_millions | relative | 0.01 | XBRL flow |
+| net_income | USD_millions | relative | 0.01 | XBRL flow (attributable to parent) |
+| net_margin | percent | absolute_pp | 0.5 | computed = net_income / revenue |
+| equity | USD_millions | relative | 0.01 | XBRL instant (StockholdersEquity) |
+| gross_margin | percent | absolute_pp | 0.5 | computed from XBRL GrossProfit |
+| cash | USD_millions | relative | 0.01 | XBRL instant |
 
-## Rules
+**Not every company has all 6** — we include only facts that are cleanly filed:
+- **Banks (JPM, BAC, GS):** no `GrossProfit` line exists (they earn net interest
+  income, not revenue−COGS), and cash is tagged inconsistently -> those omit
+  gross_margin + cash.
+- **Amazon, Google, Meta, Walmart, etc.:** genuinely don't file a `GrossProfit`
+  XBRL tag -> omit gross_margin.
 
-- **Pin, don't drift.** Facts come from a specific filing period so ground truth
-  never changes as new quarters land. FY2025 filings existing is irrelevant.
-- **No price-dependent facts in M0** (e.g. P/E). They need a pinned price
-  snapshot — added in M1 with the full 20–30 company benchmark.
-- **Tolerance discipline.** Loose enough to absorb formatting/rounding, tight
-  enough that a $36B→$40B misstatement always fails.
+## Two hard-won XBRL lessons (in the generator)
 
-## Verification log
+1. **Identify a figure by its shape, not its label.** A valid annual value can
+   appear in a `DEF 14A` with `fp=None` (e.g. CAT's net income). So flows are
+   selected by ~full-year duration (350-380 days), not by `form`/`fp`.
+2. **Companies use different tags for the same concept.** We try tags in
+   priority order: revenue via `RevenueFromContractWithCustomer...` ->
+   `Revenues`; net income via `NetIncomeLoss` -> `ProfitLoss`; equity via
+   `StockholdersEquity` -> `...IncludingPortionAttributableToNoncontrollingInterest`.
 
-| Ticker | Figures cross-checked against | Filing verified via |
-|--------|-------------------------------|---------------------|
-| AAPL   | stockanalysis.com vs 10-K (rev 391,035 / NI 93,736 / GM 46.21%) | SEC EDGAR submissions API, accession 0000320193-24-000123 |
-| MSFT   | stockanalysis.com vs 10-K (rev 245,122 / NI 88,136 / GM 69.76%) | SEC EDGAR submissions API, accession 0000950170-24-087843 |
+## Verification (spot-checked vs stockanalysis.com)
+
+| Ticker | Check | Finding |
+|---|---|---|
+| AAPL/MSFT | rev/ni/margin | exact match to prior hand-verified M0 values |
+| NVDA | revenue | ours 60,922 (period ending 2024-01-28) is correct; the label "FY2024" is ambiguous across sources — **pinning to period_end resolves it** |
+| INTC | net income | ours −18,756 = net loss *attributable to Intel* (headline figure); a source showing −19,233 includes noncontrolling interests |
+| JPM | net income | exact match (58,471). Revenue differs by definition (bank gross vs net-of-interest) — banks fail in the agent run regardless |
+| COP | rev/ni | clean XBRL match |
+
+**Definitional choices are documented and traceable to the filing** — that's what
+makes the ground truth defensible even where a second source's number differs.
+
+## Swaps / notes
+- **XOM -> COP:** Exxon tags its entire income statement under a custom namespace,
+  so the standard us-gaap XBRL API returns nothing. Swapped for ConocoPhillips.
+- Price-dependent facts (P/E) still excluded — need a pinned price snapshot.
