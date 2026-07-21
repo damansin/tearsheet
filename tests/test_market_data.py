@@ -34,7 +34,7 @@ def _patch(income_stmt):
 def test_extracts_latest_period_and_converts_units():
     p = _patch(FAKE_INCOME_STMT)
     try:
-        f = get_financials("AAPL")
+        f = get_financials("AAPL")  # fiscal_year=None -> latest
     finally:
         p.stop()
 
@@ -46,6 +46,29 @@ def test_extracts_latest_period_and_converts_units():
     assert f.unit_currency == "USD_millions"
     assert f.source == "yfinance"
     assert f.ticker == "AAPL"
+
+
+def test_fiscal_year_selects_the_right_period():
+    """fiscal_year=2023 must pick the older column, not the latest."""
+    p = _patch(FAKE_INCOME_STMT)
+    try:
+        f = get_financials("AAPL", fiscal_year=2023)
+    finally:
+        p.stop()
+
+    assert f.period_end == "2023-09-30"
+    assert f.revenue == 383285.0
+    assert f.net_income == 96995.0
+    assert f.gross_margin == 44.13            # 169148 / 383285 * 100
+
+
+def test_unknown_fiscal_year_raises_toolerror():
+    p = _patch(FAKE_INCOME_STMT)
+    try:
+        with pytest.raises(ToolError):
+            get_financials("AAPL", fiscal_year=2019)
+    finally:
+        p.stop()
 
 
 def test_empty_statement_raises_toolerror():

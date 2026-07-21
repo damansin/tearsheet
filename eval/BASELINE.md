@@ -1,4 +1,18 @@
-# M0 Baseline — naive agent
+# Baseline — naive agent
+
+## M1 update (period-aware tool)
+
+Making `get_financials` accept a target `fiscal_year` (M1 Step 1) — with no
+other change — moved the 2-company baseline from **0% -> 100% accuracy**. This
+confirms the M0 failure was entirely the tool's inability to fetch the requested
+year, not agent reasoning. This 100% is on 2 clean mega-caps with 3 copy-paste
+facts; the meaningful low baseline returns once M1 adds messy companies
+(banks, loss-makers) and harder facts. Everything below is the original M0 run,
+kept for the record.
+
+---
+
+# M0 Baseline — naive agent (original, pre-period-fix)
 
 First measured run of the naive agent against the ground-truth benchmark.
 Reproduce with:

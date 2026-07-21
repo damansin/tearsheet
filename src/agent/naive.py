@@ -44,9 +44,9 @@ def _extract_json(text: str) -> dict:
 
 
 @traceable(run_type="chain", name="naive_agent")
-def run_naive(ticker: str) -> dict:
+def run_naive(ticker: str, fiscal_year: int | None = None) -> dict:
     """Return {fact: {value, unit}} for one company — the scorer's answer shape."""
-    fin = get_financials(ticker)  # latest period, naively used as-is
+    fin = get_financials(ticker, fiscal_year=fiscal_year)  # target the requested year
 
     user = (
         f"Company: {ticker}\n"

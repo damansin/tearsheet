@@ -21,26 +21,32 @@ BENCHMARK_DIR = Path(__file__).parent / "benchmark"
 OUT_PATH = Path(__file__).parent / "agent_answers.json"
 
 
-def benchmark_tickers() -> list[str]:
-    """Every ticker the benchmark defines."""
-    return sorted(
-        json.loads(path.read_text())["ticker"]
-        for path in BENCHMARK_DIR.glob("*.json")
-    )
+def benchmark_targets() -> list[tuple[str, int]]:
+    """Every (ticker, fiscal_year) the benchmark defines.
+
+    fiscal_year is the calendar year the pinned period ends in, parsed from
+    `period_end` (e.g. "2024-09-28" -> 2024) — the same key the tool matches on.
+    """
+    targets = []
+    for path in sorted(BENCHMARK_DIR.glob("*.json")):
+        company = json.loads(path.read_text())
+        fiscal_year = int(company["period_end"][:4])
+        targets.append((company["ticker"], fiscal_year))
+    return targets
 
 
 def main() -> None:
     answers: dict[str, dict] = {}
     failures: list[str] = []
 
-    for ticker in benchmark_tickers():
+    for ticker, fiscal_year in benchmark_targets():
         try:
-            answers[ticker] = run_naive(ticker)
-            print(f"{ticker}: ok")
+            answers[ticker] = run_naive(ticker, fiscal_year=fiscal_year)
+            print(f"{ticker} (FY{fiscal_year}): ok")
         except Exception as exc:  # noqa: BLE001 - baseline agent has no recovery
             answers[ticker] = {}
             failures.append(f"{ticker}: {type(exc).__name__}: {exc}")
-            print(f"{ticker}: FAILED ({type(exc).__name__}: {exc})")
+            print(f"{ticker} (FY{fiscal_year}): FAILED ({type(exc).__name__}: {exc})")
 
     OUT_PATH.write_text(json.dumps(answers, indent=2) + "\n")
     print(f"\nwrote {OUT_PATH}")

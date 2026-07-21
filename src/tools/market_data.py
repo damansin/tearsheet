@@ -59,9 +59,30 @@ def _cell(income_stmt, label: str, column) -> float:
     return float(value)
 
 
+def _select_period(income_stmt, fiscal_year: int | None):
+    """Pick the income-statement column for `fiscal_year`.
+
+    `fiscal_year` = the calendar year the fiscal period ENDS in (Apple's FY2024
+    ends 2024-09-28 -> 2024). None picks the most recent report. Columns are
+    periods, newest first. Missing year is a loud failure, not a silent
+    fall-back to the wrong year.
+    """
+    if fiscal_year is None:
+        return income_stmt.columns[0]
+    for column in income_stmt.columns:
+        if column.year == fiscal_year:
+            return column
+    available = sorted({c.year for c in income_stmt.columns})
+    raise ToolError(f"no annual report ending in {fiscal_year}; available: {available}")
+
+
 @traceable(run_type="tool")
-def get_financials(ticker: str) -> Financials:
-    """Fetch the most recent annual financials for `ticker`."""
+def get_financials(ticker: str, fiscal_year: int | None = None) -> Financials:
+    """Fetch annual financials for `ticker`.
+
+    fiscal_year: calendar year the fiscal period ends in (e.g. 2024). None =
+    most recent annual report.
+    """
     try:
         income_stmt = yf.Ticker(ticker).income_stmt
     except Exception as exc:  # network/library errors -> our clean error type
@@ -70,14 +91,14 @@ def get_financials(ticker: str) -> Financials:
     if income_stmt is None or income_stmt.empty:
         raise ToolError(f"no income statement for {ticker!r} (bad ticker or rate limited)")
 
-    latest = income_stmt.columns[0]  # columns are periods, newest first
-    revenue = _cell(income_stmt, REVENUE_LABEL, latest)
-    net_income = _cell(income_stmt, NET_INCOME_LABEL, latest)
-    gross_profit = _cell(income_stmt, GROSS_PROFIT_LABEL, latest)
+    column = _select_period(income_stmt, fiscal_year)
+    revenue = _cell(income_stmt, REVENUE_LABEL, column)
+    net_income = _cell(income_stmt, NET_INCOME_LABEL, column)
+    gross_profit = _cell(income_stmt, GROSS_PROFIT_LABEL, column)
 
     return Financials(
         ticker=ticker.upper(),
-        period_end=str(latest.date()),
+        period_end=str(column.date()),
         revenue=round(revenue / 1e6, 2),      # raw dollars -> millions
         net_income=round(net_income / 1e6, 2),
         gross_margin=round(gross_profit / revenue * 100, 2),
