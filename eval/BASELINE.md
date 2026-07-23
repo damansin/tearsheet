@@ -14,7 +14,9 @@ python eval/run_eval.py --answers eval/agent_answers.json
 | **Fact-accuracy** | **57.7%** (75 correct) |
 | **Hallucination rate** | **36.4%** (43 wrong) |
 | Latency p50 / p95 | 1.63s / 2.52s |
-| Tokens/run · cost | ~347 · ~$0.019 total |
+| LLM calls | 22 (25 companies − 3 banks that failed before reaching the LLM) |
+| Tokens | 3,597 in / 4,034 out |
+| **Cost** | **$0.023767 total · $0.00108 per company** |
 
 ### Accuracy by fact — the thesis in one table
 
