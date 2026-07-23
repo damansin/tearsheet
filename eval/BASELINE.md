@@ -1,5 +1,52 @@
 # Baseline — naive agent
 
+## M1 full baseline (25 companies, 130 facts) — THE "before" number
+
+```bash
+python eval/run_agent.py                                  # 25 Haiku calls, ~$0.02
+python eval/run_eval.py --answers eval/agent_answers.json
+```
+
+| Metric | Value |
+|---|---|
+| Companies / facts | 25 / 130 |
+| **Completion** | **90.8%** (118 attempted) |
+| **Fact-accuracy** | **57.7%** (75 correct) |
+| **Hallucination rate** | **36.4%** (43 wrong) |
+| Latency p50 / p95 | 1.63s / 2.52s |
+| Tokens/run · cost | ~347 · ~$0.019 total |
+
+### Accuracy by fact — the thesis in one table
+
+| fact | correct | wrong | missing | note |
+|---|---:|---:|---:|---|
+| revenue | 21 | 1 | 3 | agent fetches it |
+| net_income | 22 | 0 | 3 | agent fetches it |
+| gross_margin | 10 | 0 | 0 | agent fetches it (only 10 cos have it) |
+| net_margin | 21 | 1 | 3 | agent computes it |
+| **cash** | **1** | **19** | 0 | **NOT fetched -> confabulated** |
+| **equity** | **0** | **22** | 3 | **NOT fetched -> confabulated (0/22 right)** |
+
+**The lesson:** the 4 facts the agent gathers/computes are ~97% correct; the 2 it
+doesn't gather are ~2% correct. **Reliability tracks whether the agent actually
+fetched the data** — everything else it invents, confidently. `equity` was
+hallucinated 22/22 times and never once correct.
+
+### Failure modes catalogued (ranked)
+1. **Confabulation of ungathered facts (dominant, ~41 of 43 wrong).** The agent
+   has no balance-sheet tool, but the prompt asks for cash + equity, so it makes
+   up plausible numbers instead of admitting it lacks them. -> Fix: M2 planner
+   gathers balance-sheet data; M3 critic forbids answering beyond tool data.
+2. **Bank tool failure (JPM, BAC, GS -> 12 missing facts).** `get_financials`
+   hardcodes fetching a "Gross Profit" row; banks have none -> `ToolError` ->
+   whole company yields nothing. -> Fix: M2/M3 robustness to heterogeneous
+   statements.
+3. **1 revenue miss (+ its net_margin)** — a single company where the agent's
+   value fell outside tolerance. Investigate in Step 5 (likely yfinance vs XBRL
+   definitional gap).
+
+---
+
 ## M1 update (period-aware tool)
 
 Making `get_financials` accept a target `fiscal_year` (M1 Step 1) — with no

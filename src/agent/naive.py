@@ -27,11 +27,11 @@ load_dotenv()  # read ANTHROPIC_API_KEY from .env
 MODEL = "claude-haiku-4-5"
 
 SYSTEM = (
-    "You are a financial analyst assistant. You are given financial data for a "
-    "company. Output ONLY a JSON object (no prose) with exactly these keys: "
-    "revenue, net_income, gross_margin. Each maps to an object "
-    '{"value": <number>, "unit": <string>}. Use "USD_millions" for revenue and '
-    'net_income, and "percent" for gross_margin.'
+    "You are a financial analyst assistant producing a company's key financials. "
+    "Output ONLY a JSON object (no prose) with exactly these keys: revenue, "
+    "net_income, gross_margin, net_margin, cash, equity. Each maps to an object "
+    '{"value": <number>, "unit": <string>}. Use "USD_millions" for revenue, '
+    'net_income, cash, and equity; use "percent" for gross_margin and net_margin.'
 )
 
 
