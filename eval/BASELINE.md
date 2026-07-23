@@ -32,18 +32,26 @@ doesn't gather are ~2% correct. **Reliability tracks whether the agent actually
 fetched the data** — everything else it invents, confidently. `equity` was
 hallucinated 22/22 times and never once correct.
 
-### Failure modes catalogued (ranked)
-1. **Confabulation of ungathered facts (dominant, ~41 of 43 wrong).** The agent
-   has no balance-sheet tool, but the prompt asks for cash + equity, so it makes
-   up plausible numbers instead of admitting it lacks them. -> Fix: M2 planner
-   gathers balance-sheet data; M3 critic forbids answering beyond tool data.
-2. **Bank tool failure (JPM, BAC, GS -> 12 missing facts).** `get_financials`
-   hardcodes fetching a "Gross Profit" row; banks have none -> `ToolError` ->
-   whole company yields nothing. -> Fix: M2/M3 robustness to heterogeneous
-   statements.
-3. **1 revenue miss (+ its net_margin)** — a single company where the agent's
-   value fell outside tolerance. Investigate in Step 5 (likely yfinance vs XBRL
-   definitional gap).
+### Failure modes catalogued (ranked) — these ARE the M2/M3 build targets
+
+| # | Failure mode | Volume | Root cause | Fixed by |
+|---|---|---|---|---|
+| 1 | **Confabulation of ungathered facts** | ~41 of 43 wrong (cash 19, equity 22) | no balance-sheet tool + no rule against answering beyond evidence | **M2** (planner gathers balance sheet) + **M3** (critic forbids answers unsupported by tool data) |
+| 2 | **Tool rigidity on heterogeneous statements** | 12 missing (JPM, BAC, GS) | `get_financials` hardcodes a "Gross Profit" row; banks have none -> `ToolError` kills the whole company | **M2/M3** robustness + recovery (don't let one missing row zero out a company) |
+| 3 | **Single-source definitional mismatch** | 2 wrong (COP revenue + cascaded net_margin) | agent's tool (yfinance "total revenue" 54,745) uses a broader definition than the ground-truth source (XBRL "operating revenue" 49,418); +computed facts cascade the error | **M3** cross-source verification (check the agent's number against the filing) |
+
+**Top 2 by volume drive M2/M3.** #1 alone is ~95% of the wrong answers — closing
+it is where the accuracy jump comes from. #3 is low-volume but a distinct class
+(single-source trust) and a clean motivation for cross-checking against the source.
+
+**Detective notes**
+- COP diagnosis: agent revenue 54,745 (yfinance total revenues + other income) vs
+  truth 49,418 (XBRL sales & operating revenues). Energy cos have large "other
+  income", so the two revenue definitions diverge >1% here where they agreed for
+  the other 23. Ground truth left as-is (49,418 is the filed figure); this is a
+  real, M3-fixable failure, not a benchmark error.
+- Cascading: `net_margin` failed only because `revenue` did. Computed facts
+  inherit their inputs' errors — a reason M3 should verify inputs before ratios.
 
 ---
 
