@@ -1,12 +1,21 @@
 name: CI
 
-# Runs the test suite on a clean machine every time main is updated.
-# Everything here is hermetic: no network, no API keys, no cost.
+# Runs the test suite + the eval accuracy gate on a clean machine every time
+# main is updated. Everything here is hermetic: no network, no API keys, no cost.
 #
-# Not here (on purpose):
-#   - running the agent (eval/run_agent.py) — needs a paid API key + live network
-#   - eval threshold gating — added in M1, once there is a meaningful
-#     accuracy threshold to fail against. A check that cannot fail is not a gate.
+# What the accuracy gate DOES protect:
+#   - a broken scorer (tolerance/unit logic) -> same answers score differently
+#   - a corrupted benchmark (bad values, deleted facts)
+#   - committing worse results after re-running the agent
+#
+# What it does NOT protect (be honest about this):
+#   - an agent change pushed WITHOUT re-running eval/run_agent.py — the committed
+#     answers file is then stale, so the gate scores yesterday's results.
+#     A true live-agent quality gate needs an API key + network + spend, so it
+#     belongs in a manual/nightly tier, not on every push.
+#
+# Threshold is a RATCHET: set just below the current baseline (57.7%), and raised
+# every time the metric improves, so gains get locked in and can't silently slip.
 
 on:
   push:
@@ -29,3 +38,6 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+      - name: Eval accuracy gate (scores committed answers — no API calls)
+        run: python eval/run_eval.py --answers eval/agent_answers.json --min-accuracy 0.50

@@ -20,6 +20,7 @@ Metrics (kept deliberately separate — missing and wrong are different sins):
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 BENCHMARK_DIR = Path(__file__).parent / "benchmark"
@@ -116,11 +117,29 @@ def print_report(scored: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--answers", required=True, help="path to answers JSON")
+    parser.add_argument(
+        "--min-accuracy", type=float, default=None,
+        help="fail (exit 1) if fact_accuracy falls below this, e.g. 0.50. "
+             "Omit to just report. This is what makes CI a gate: a non-zero "
+             "exit turns the build red.",
+    )
     args = parser.parse_args()
 
     truth = load_ground_truth()
     answers = json.loads(Path(args.answers).read_text())
-    print_report(score(truth, answers))
+    scored = score(truth, answers)
+    print_report(scored)
+
+    if args.min_accuracy is None:
+        return
+
+    accuracy = scored["fact_accuracy"]
+    if accuracy < args.min_accuracy:
+        print(f"\nGATE FAILED: fact_accuracy {accuracy:.1%} < "
+              f"required {args.min_accuracy:.1%}")
+        sys.exit(1)
+    print(f"\nGATE PASSED: fact_accuracy {accuracy:.1%} >= "
+          f"required {args.min_accuracy:.1%}")
 
 
 if __name__ == "__main__":
