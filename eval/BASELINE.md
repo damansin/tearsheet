@@ -3,7 +3,7 @@
 ## M1 full baseline (25 companies, 130 facts) — THE "before" number
 
 ```bash
-python eval/run_agent.py                                  # 25 Haiku calls, ~$0.02
+python eval/run_agent.py                                  # 22 Haiku calls, ~$0.024
 python eval/run_eval.py --answers eval/agent_answers.json
 ```
 
@@ -15,8 +15,13 @@ python eval/run_eval.py --answers eval/agent_answers.json
 | **Hallucination rate** | **36.4%** (43 wrong) |
 | Latency p50 / p95 | 1.63s / 2.52s |
 | LLM calls | 22 (25 companies − 3 banks that failed before reaching the LLM) |
-| Tokens | 3,597 in / 4,034 out |
-| **Cost** | **$0.023767 total · $0.00108 per company** |
+| **Input tokens** | **3,597** → $0.0036 (@ $1.00 / 1M) |
+| **Output tokens** | **4,034** → $0.0202 (@ $5.00 / 1M) |
+| **Total cost** | **$0.023767 · $0.00108 per company** |
+
+> **Cost insight:** output tokens are ~53% of the volume but **~85% of the cost**,
+> because output is priced 5× input. To cut LLM spend, shrink the *response*
+> before you shrink the prompt. (Verified against the LangSmith UI to the digit.)
 
 ### Accuracy by fact — the thesis in one table
 
