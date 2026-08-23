@@ -1,4 +1,74 @@
-# Baseline — naive agent
+# Baseline - measured results
+
+## M2: planner/executor agent (LangGraph) - THE LIFT
+
+```bash
+python eval/run_agent.py --agent planner --out eval/answers_planner.json
+python eval/run_eval.py --answers eval/answers_planner.json
+```
+
+| Metric | M1 naive | + fixed tools | **+ planner (M2)** |
+|---|---|---|---|
+| Completion | 90.8% | 100.0% | **100.0%** |
+| **Fact-accuracy** | 57.7% | 63.1% | **96.2%** |
+| **Hallucination** | 36.4% | 36.9% | **3.8%** |
+| Tokens / company | 347 | ~347 | 783 (2.3x) |
+| Cost / company | $0.00108 | ~same | $0.00194 (1.8x) |
+| Latency p50 / p95 | 1.63s / 2.52s | ~same | 4.06s / 5.75s (2.5x) |
+
+**Attribution is clean:** the tool fix bought +5.4pp (bank robustness); the
+architecture bought **+33.1pp accuracy** (63.1 -> 96.2) and collapsed
+hallucination **36.9% -> 3.8%**.
+
+### Where the lift came from (correct/wrong/missing)
+
+| fact | M1 naive | + tools | + planner |
+|---|---|---|---|
+| revenue | 21/1/3 | 23/2/0 | 23/2/0 |
+| net_income | 22/0/3 | 25/0/0 | 25/0/0 |
+| gross_margin | 10/0/0 | 10/0/0 | 10/0/0 |
+| net_margin | 21/1/3 | 23/2/0 | 23/2/0 |
+| **cash** | 1/19/0 | 1/19/0 | **20/0/0** |
+| **equity** | 0/22/3 | 0/25/0 | **24/1/0** |
+
+Cash and equity - the two facts the naive agent invented - went from 1 correct
+to 44 correct with **zero** wrong. That is the entire lift. Nothing else moved,
+because nothing else was broken.
+
+### What is still wrong (5 facts) - and it is all ONE class
+
+| ticker | fact | agent | truth | cause |
+|---|---|---|---|---|
+| COP | revenue | 54,745 | 49,418 | yfinance "total revenues + other income" vs XBRL "sales & operating revenues" |
+| COP | net_margin | 16.89 | 18.71 | cascades from revenue |
+| JPM | revenue | 169,439 | 177,556 | bank revenue: gross vs net of interest expense |
+| JPM | net_margin | 34.51 | 32.93 | cascades from revenue |
+| UNH | equity | 92,658 | 98,268 | yfinance equity EXCLUDES noncontrolling interests; XBRL tag includes them (yfinance also lists 102,591 as a third variant) |
+
+**Zero confabulation remains.** Every surviving error is a *single-source
+definitional mismatch* - the agent faithfully reported what its tool said, and
+its tool defines the concept differently than the filing does. That is failure
+mode #3 from M1, now the dominant one, and it is exactly what M3's cross-source
+verification targets: check the agent's number against the filing, not just
+against itself.
+
+### New failure mode the architecture introduced
+
+The first benchmark run scored 87.7% because AMZN and BA returned nothing - a
+transient LLM failure inside the synthesizer node was caught into
+`state["errors"]`, so the graph returned empty answers and the harness printed
+"ok". In M1 a failure raised and was loud; in a graph, **errors become data and
+can be silently ignored**. Fixed by having `run_planner` raise when errors
+produced no answers and warn on partial failure. Retry/fallback is M3.
+
+### Cost of the lift
+
+Two LLM calls per company instead of one (planner + synthesizer), plus a second
+tool call: 2.3x tokens, 1.8x cost, 2.5x latency. Accuracy +33pp for ~2x spend is
+a good trade here, but it is a real trade and worth stating.
+
+---
+
 
 ## M1 full baseline (25 companies, 130 facts) — THE "before" number
 

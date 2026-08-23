@@ -17,6 +17,7 @@ keys it changed.
 """
 
 import json
+import sys
 from dataclasses import asdict
 from typing import TypedDict
 
@@ -166,4 +167,12 @@ def run_planner(ticker: str, fiscal_year: int | None = None) -> dict:
         "ticker": ticker.upper(), "fiscal_year": fiscal_year,
         "plan": [], "gathered": {}, "errors": [], "answers": {},
     })
+    # A graph collects failures into state instead of raising, which means a
+    # node can fail silently and the caller sees only empty answers. Surface
+    # them: warn on partial failure, raise when nothing survived. (M2 makes
+    # failures VISIBLE; retry/fallback is M3's job.)
+    if final["errors"]:
+        if not final["answers"]:
+            raise RuntimeError(f"{ticker}: {'; '.join(final['errors'])}")
+        print(f"  warning {ticker}: {'; '.join(final['errors'])}", file=sys.stderr)
     return final["answers"]

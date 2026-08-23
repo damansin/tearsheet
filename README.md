@@ -13,7 +13,7 @@ provide investment advice.
 **The point of this project is reliability, measured.** Not "here's a demo that
 looks good" — here's a benchmark, a baseline, and the numbers moving.
 
-> 🚧 **Work in progress.** M0 and M1 complete; M2 (planner/executor) next.
+> 🚧 **Work in progress.** M0–M2 complete; M3 (verification + recovery) next.
 
 ---
 
@@ -24,14 +24,33 @@ filings, pinned to FY2024).
 
 | Stage | Fact-accuracy | Hallucination rate | Completion |
 |---|---|---|---|
-| **M1 — naive agent (baseline)** | **57.7%** | **36.4%** | 90.8% |
-| M2 — planner / executor | _pending_ | _pending_ | _pending_ |
+| **M1 — naive agent (baseline)** | 57.7% | 36.4% | 90.8% |
+| **M2 — planner / executor (LangGraph)** | **96.2%** | **3.8%** | **100.0%** |
 | M3 — verification + recovery | _pending_ | _pending_ | _pending_ |
 
-Cost/latency at baseline: **$0.0238** for the full 25-company run
-(**$0.00108/company**), p50 **1.63s**, p95 **2.52s**.
+**M2 in one line:** splitting the agent into planner → executor → synthesizer,
+and forbidding the synthesizer from reporting anything it did not gather, took
+fact-accuracy from **57.7% → 96.2%** and hallucination from **36.4% → 3.8%**.
+Cost of that lift: ~2x tokens, cost, and latency (two LLM calls per company
+instead of one).
 
-### Why the naive agent scores 57.7%
+Cost/latency: naive **$0.00108**/company, p50 1.63s · planner **$0.00194**/company,
+p50 4.06s.
+
+### What M2 fixed, and what it did not
+
+Cash and equity — the two facts the naive agent had no tool for and therefore
+invented — went from **1 correct out of 45** to **44 correct, zero wrong**. That
+single change is the entire lift; nothing else moved, because nothing else was
+broken.
+
+All **5 remaining errors are one class**: single-source definitional mismatches
+(COP revenue, JPM revenue, UNH equity — plus two cascaded margins). The agent
+faithfully reports what its tool says; its tool defines the concept differently
+than the filing does. **Zero confabulation remains.** That is what M3's
+cross-source verification targets.
+
+### Why the naive agent scored 57.7%
 
 The failure signature is not random — it's structural:
 
@@ -83,10 +102,10 @@ python -m venv .venv && .venv/Scripts/activate   # Windows
 pip install -e ".[dev]"
 cp .env.example .env                             # add ANTHROPIC_API_KEY (+ LangSmith keys)
 
-pytest                                           # 16 tests, no network/keys needed
+pytest                                           # 20 tests, no network/keys needed
 python -m src.agent.run --ticker AAPL            # one company
-python eval/run_agent.py                         # run the benchmark (~$0.024)
-python eval/run_eval.py --answers eval/agent_answers.json
+python eval/run_agent.py --agent planner         # run the benchmark (~$0.05)
+python eval/run_eval.py --answers eval/answers_planner.json
 python eval/build_ground_truth.py                # regenerate ground truth from SEC
 ```
 
@@ -100,8 +119,9 @@ EDGAR/XBRL** · **LangSmith** (tracing, cost, latency) · pytest + GitHub Action
 ## Project layout
 
 ```
-src/agent/      planner, executor, critic, replanner (naive agent today)
-src/tools/      yfinance wrapper (typed, raises ToolError)
+src/agent/      graph.py = LangGraph planner/executor/synthesizer;
+                naive.py = the M1 baseline, kept for A/B
+src/tools/      yfinance wrappers: income statement + balance sheet
 eval/benchmark/ 25 companies of SEC-sourced ground truth
 eval/run_eval.py       scorer + CI accuracy gate
 eval/run_agent.py      runs the agent across the benchmark

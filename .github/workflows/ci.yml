@@ -14,7 +14,7 @@ name: CI
 #     A true live-agent quality gate needs an API key + network + spend, so it
 #     belongs in a manual/nightly tier, not on every push.
 #
-# Threshold is a RATCHET: set just below the current baseline (57.7%), and raised
+# Threshold is a RATCHET: set just below the current best (M2 planner: 96.2%), raised
 # every time the metric improves, so gains get locked in and can't silently slip.
 
 on:
@@ -40,4 +40,4 @@ jobs:
         run: pytest -q
 
       - name: Eval accuracy gate (scores committed answers — no API calls)
-        run: python eval/run_eval.py --answers eval/agent_answers.json --min-accuracy 0.50
+        run: python eval/run_eval.py --answers eval/answers_planner.json --min-accuracy 0.90
