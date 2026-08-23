@@ -16,6 +16,7 @@ import argparse
 import json
 from pathlib import Path
 
+from src.agent.graph import run_planner
 from src.agent.naive import run_naive
 
 BENCHMARK_DIR = Path(__file__).parent / "benchmark"
@@ -39,18 +40,24 @@ def benchmark_targets() -> list[tuple[str, int]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--agent", choices=["naive", "planner"], default="planner",
+        help="which agent to run across the benchmark",
+    )
+    parser.add_argument(
         "--out", default=str(OUT_PATH),
         help="where to write answers (keep runs side by side for comparison)",
     )
     args = parser.parse_args()
     out_path = Path(args.out)
 
+    run = run_naive if args.agent == "naive" else run_planner
+
     answers: dict[str, dict] = {}
     failures: list[str] = []
 
     for ticker, fiscal_year in benchmark_targets():
         try:
-            answers[ticker] = run_naive(ticker, fiscal_year=fiscal_year)
+            answers[ticker] = run(ticker, fiscal_year=fiscal_year)
             print(f"{ticker} (FY{fiscal_year}): ok")
         except Exception as exc:  # noqa: BLE001 - baseline agent has no recovery
             answers[ticker] = {}

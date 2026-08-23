@@ -11,6 +11,7 @@ dependencies = [
     "yfinance",
     "anthropic",
     "langsmith",
+    "langgraph",
 ]
 
 [project.optional-dependencies]
