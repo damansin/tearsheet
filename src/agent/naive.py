@@ -53,7 +53,9 @@ def run_naive(ticker: str, fiscal_year: int | None = None) -> dict:
         f"period_end: {fin.period_end}\n"
         f"revenue: {fin.revenue} {fin.unit_currency}\n"
         f"net_income: {fin.net_income} {fin.unit_currency}\n"
-        f"gross_margin: {fin.gross_margin} percent\n\n"
+        + (f"gross_margin: {fin.gross_margin} percent\n"
+           if fin.gross_margin is not None else "")
+        + "\n"
         "Produce the JSON."
     )
 

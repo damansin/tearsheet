@@ -11,7 +11,8 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from src.tools.market_data import Financials, ToolError, get_financials
+from src.tools.market_data import (Financials, ToolError, get_balance_sheet,
+                                   get_financials)
 
 # Real AAPL FY2024 figures in raw dollars, as yfinance returns them.
 FAKE_INCOME_STMT = pd.DataFrame(
@@ -99,3 +100,72 @@ def test_nan_value_raises_toolerror():
             get_financials("AAPL")
     finally:
         p.stop()
+
+
+# --- balance sheet + optional gross profit (M2 Step 2) -----------------------
+
+# Real AAPL FY2024 balance-sheet figures in raw dollars, as yfinance returns them.
+FAKE_BALANCE_SHEET = pd.DataFrame(
+    {
+        pd.Timestamp("2024-09-28"): [29943e6, 56950e6],
+        pd.Timestamp("2023-09-30"): [29965e6, 62146e6],
+    },
+    index=["Cash And Cash Equivalents", "Stockholders Equity"],
+)
+
+
+def _patch_bs(sheet):
+    p = patch("src.tools.market_data.yf.Ticker")
+    mock = p.start()
+    mock.return_value.balance_sheet = sheet
+    return p
+
+
+def test_balance_sheet_extracts_and_converts():
+    p = _patch_bs(FAKE_BALANCE_SHEET)
+    try:
+        bs = get_balance_sheet("AAPL", fiscal_year=2024)
+    finally:
+        p.stop()
+
+    assert bs.ticker == "AAPL"
+    assert bs.period_end == "2024-09-28"
+    assert bs.cash == 29943.0        # dollars -> millions
+    assert bs.equity == 56950.0
+    assert bs.unit_currency == "USD_millions"
+
+
+def test_balance_sheet_missing_row_is_none_not_error():
+    """One absent line must not zero out the rest of the company."""
+    no_cash = FAKE_BALANCE_SHEET.drop(index=["Cash And Cash Equivalents"])
+    p = _patch_bs(no_cash)
+    try:
+        bs = get_balance_sheet("AAPL", fiscal_year=2024)
+    finally:
+        p.stop()
+
+    assert bs.cash is None
+    assert bs.equity == 56950.0      # the rest still comes through
+
+
+def test_balance_sheet_empty_raises_toolerror():
+    p = _patch_bs(pd.DataFrame())
+    try:
+        with pytest.raises(ToolError):
+            get_balance_sheet("AAPL")
+    finally:
+        p.stop()
+
+
+def test_bank_without_gross_profit_still_returns_financials():
+    """The M1 bank failure: no 'Gross Profit' row must no longer kill the company."""
+    bank = FAKE_INCOME_STMT.drop(index=["Gross Profit"])
+    p = _patch(bank)
+    try:
+        f = get_financials("JPM", fiscal_year=2024)
+    finally:
+        p.stop()
+
+    assert f.gross_margin is None    # honestly absent, not invented
+    assert f.revenue == 391035.0     # everything else still delivered
+    assert f.net_income == 93736.0

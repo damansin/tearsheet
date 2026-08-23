@@ -24,6 +24,12 @@ from langsmith import traceable
 REVENUE_LABEL = "Total Revenue"
 NET_INCOME_LABEL = "Net Income"
 GROSS_PROFIT_LABEL = "Gross Profit"
+# Balance-sheet labels. Verified against SEC XBRL ground truth to the dollar for
+# AAPL/MSFT/INTC/KO/JPM. Do NOT swap these for their near-neighbours:
+# "Cash Cash Equivalents And Short Term Investments" and "Common Stock Equity"
+# are DIFFERENT concepts and disagree with the filings.
+CASH_LABEL = "Cash And Cash Equivalents"
+EQUITY_LABEL = "Stockholders Equity"
 
 
 class ToolError(Exception):
@@ -40,7 +46,7 @@ class Financials:
     period_end: str          # e.g. "2025-09-30" — which fiscal year this is
     revenue: float           # USD millions
     net_income: float        # USD millions
-    gross_margin: float      # percent
+    gross_margin: float | None   # percent; None when the filing has no gross profit (banks)
     unit_currency: str = "USD_millions"
     source: str = "yfinance"
 
@@ -57,6 +63,19 @@ def _cell(income_stmt, label: str, column) -> float:
     if value != value:  # NaN check (NaN is the only value not equal to itself)
         raise ToolError(f"label {label!r} is NaN for period {column}")
     return float(value)
+
+
+def _cell_optional(statement, label: str, column) -> float | None:
+    """Like _cell, but returns None instead of raising when the row is absent.
+
+    Used for genuinely optional concepts. Banks report no "Gross Profit" (they
+    earn net interest income, not revenue - COGS), so a missing row there is a
+    fact about the company, not a failure - it must not kill the whole company.
+    """
+    try:
+        return _cell(statement, label, column)
+    except ToolError:
+        return None
 
 
 def _select_period(income_stmt, fiscal_year: int | None):
@@ -94,12 +113,51 @@ def get_financials(ticker: str, fiscal_year: int | None = None) -> Financials:
     column = _select_period(income_stmt, fiscal_year)
     revenue = _cell(income_stmt, REVENUE_LABEL, column)
     net_income = _cell(income_stmt, NET_INCOME_LABEL, column)
-    gross_profit = _cell(income_stmt, GROSS_PROFIT_LABEL, column)
+    gross_profit = _cell_optional(income_stmt, GROSS_PROFIT_LABEL, column)
 
     return Financials(
         ticker=ticker.upper(),
         period_end=str(column.date()),
         revenue=round(revenue / 1e6, 2),      # raw dollars -> millions
         net_income=round(net_income / 1e6, 2),
-        gross_margin=round(gross_profit / revenue * 100, 2),
+        gross_margin=(round(gross_profit / revenue * 100, 2)
+                      if gross_profit is not None else None),
+    )
+
+
+@dataclass
+class BalanceSheet:
+    ticker: str
+    period_end: str          # e.g. "2024-09-28"
+    cash: float | None       # USD millions
+    equity: float | None     # USD millions
+    unit_currency: str = "USD_millions"
+    source: str = "yfinance"
+
+
+@traceable(run_type="tool")
+def get_balance_sheet(ticker: str, fiscal_year: int | None = None) -> BalanceSheet:
+    """Fetch cash + shareholders' equity for `ticker`.
+
+    The facts the naive agent had no way to obtain (and therefore invented).
+    Both are optional: a missing row yields None rather than an error, so one
+    absent line never zeroes out the rest of the company.
+    """
+    try:
+        sheet = yf.Ticker(ticker).balance_sheet
+    except Exception as exc:
+        raise ToolError(f"yfinance balance sheet failed for {ticker!r}: {exc}") from exc
+
+    if sheet is None or sheet.empty:
+        raise ToolError(f"no balance sheet for {ticker!r} (bad ticker or rate limited)")
+
+    column = _select_period(sheet, fiscal_year)
+    cash = _cell_optional(sheet, CASH_LABEL, column)
+    equity = _cell_optional(sheet, EQUITY_LABEL, column)
+
+    return BalanceSheet(
+        ticker=ticker.upper(),
+        period_end=str(column.date()),
+        cash=round(cash / 1e6, 2) if cash is not None else None,
+        equity=round(equity / 1e6, 2) if equity is not None else None,
     )
