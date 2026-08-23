@@ -23,6 +23,45 @@ python eval/run_eval.py --answers eval/agent_answers.json
 > because output is priced 5× input. To cut LLM spend, shrink the *response*
 > before you shrink the prompt. (Verified against the LangSmith UI to the digit.)
 
+### Ablation: naive agent + FIXED tools (M2 Step 2)
+
+Run after adding `get_balance_sheet` and making `gross_profit` optional, but
+BEFORE any architecture change. Isolates what the tool fix alone bought, so the
+M2 planner does not get credit for it.
+
+```bash
+python eval/run_agent.py --out eval/answers_naive_fixedtools.json
+python eval/run_eval.py --answers eval/answers_naive_fixedtools.json
+```
+
+| Metric | M1 baseline | Naive + fixed tools | Delta |
+|---|---|---|---|
+| Completion | 90.8% | **100.0%** | +9.2pp |
+| Fact-accuracy | 57.7% | **63.1%** | +5.4pp |
+| Hallucination | 36.4% | 36.9% | +0.5pp (unchanged) |
+
+Per fact (correct / wrong / missing):
+
+| fact | M1 baseline | fixed tools |
+|---|---|---|
+| revenue | 21/1/3 | 23/2/0 |
+| net_income | 22/0/3 | **25/0/0** |
+| gross_margin | 10/0/0 | 10/0/0 |
+| net_margin | 21/1/3 | 23/2/0 |
+| cash | 1/19/0 | **1/19/0** (identical) |
+| equity | 0/22/3 | **0/25/0** |
+
+**The lesson: a capability that exists but is never invoked changes nothing.**
+The tool fix removed the bank failure (completion 90.8 -> 100%, no facts
+missing), but cash/equity accuracy is byte-for-byte unchanged, because the naive
+agent's hard-coded pipeline never calls `get_balance_sheet`. Equity went from
+22 wrong + 3 missing to 25 wrong: the banks stopped dying and started
+confabulating along with everyone else.
+
+Closing that gap is precisely the planner's job in M2 Step 3 - deciding to
+gather balance-sheet data. Attribution is now clean: tool fix = +5.4pp
+(robustness), architecture = whatever Step 4 measures on top of 63.1%.
+
 ### Accuracy by fact — the thesis in one table
 
 | fact | correct | wrong | missing | note |

@@ -12,6 +12,7 @@ empty answer — the scorer then counts those facts as `missing`, and the failur
 is printed so it can be catalogued rather than hidden.
 """
 
+import argparse
 import json
 from pathlib import Path
 
@@ -36,6 +37,14 @@ def benchmark_targets() -> list[tuple[str, int]]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--out", default=str(OUT_PATH),
+        help="where to write answers (keep runs side by side for comparison)",
+    )
+    args = parser.parse_args()
+    out_path = Path(args.out)
+
     answers: dict[str, dict] = {}
     failures: list[str] = []
 
@@ -48,8 +57,8 @@ def main() -> None:
             failures.append(f"{ticker}: {type(exc).__name__}: {exc}")
             print(f"{ticker} (FY{fiscal_year}): FAILED ({type(exc).__name__}: {exc})")
 
-    OUT_PATH.write_text(json.dumps(answers, indent=2) + "\n")
-    print(f"\nwrote {OUT_PATH}")
+    out_path.write_text(json.dumps(answers, indent=2) + "\n")
+    print(f"\nwrote {out_path}")
     if failures:
         print(f"{len(failures)} agent failure(s):")
         for f in failures:
