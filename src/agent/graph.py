@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 from langgraph.graph import END, START, StateGraph
 from langsmith.wrappers import wrap_anthropic
 
+from src.agent.critic import check_against_context, check_answers, check_tool_result
 from src.tools.faults import wrap_tool
 from src.tools.market_data import ToolError, get_balance_sheet, get_financials
 
@@ -50,6 +51,8 @@ class AgentState(TypedDict):
     gathered: dict         # step name -> tool result (the evidence)
     errors: list[str]      # what failed; M3 will act on these, M2 just records
     answers: dict          # final output, the scorer's shape
+    last_step: str | None  # which step the critic should inspect
+    verdicts: list[dict]   # critic decisions, kept for the trace
 
 
 PLANNER_SYSTEM = (
@@ -120,7 +123,50 @@ def executor(state: AgentState) -> dict:
         gathered[step] = asdict(result)
     except ToolError as exc:
         errors.append(f"{step}: {exc}")
-    return {"plan": remaining, "gathered": gathered, "errors": errors}
+    return {"plan": remaining, "gathered": gathered, "errors": errors,
+            "last_step": step}
+
+
+def critic(state: AgentState) -> dict:
+    """Verify the step just executed. Unverified data is DISCARDED, not fixed --
+    turning a confident wrong answer into an honest gap. Recovering that gap is
+    Step 4's job; keeping the two separate is what lets us attribute each lift."""
+    step = state.get("last_step")
+    if not step or step not in state["gathered"]:
+        return {}
+
+    verdict = check_tool_result(step, state["gathered"][step])
+    # cross-tool checks: equity is only judgeable against revenue from the
+    # income statement, so fold in everything gathered so far as context
+    context = {}
+    for name, data in state["gathered"].items():
+        if name != step:
+            context.update({k: v for k, v in data.items() if isinstance(v, (int, float))})
+    extra = check_against_context(state["gathered"][step], context)
+    if not extra.ok:
+        verdict.ok = False
+        verdict.problems += extra.problems
+        verdict.bad_fields += extra.bad_fields
+    verdicts = state["verdicts"] + [
+        {"step": step, "ok": verdict.ok, "problems": verdict.problems}]
+    if verdict.ok:
+        return {"verdicts": verdicts}
+
+    # drop ONLY the offending fields, keeping the rest of the tool's output
+    cleaned = {k: v for k, v in state["gathered"][step].items()
+               if k not in verdict.bad_fields}
+    gathered = dict(state["gathered"])
+    gathered[step] = cleaned
+    reasons = "; ".join(verdict.problems)
+    return {"gathered": gathered, "verdicts": verdicts,
+            "errors": state["errors"] + [f"{step}: rejected by critic: {reasons}"]}
+
+
+def verifier(state: AgentState) -> dict:
+    """Self-consistency on the final answer: every claim must trace to a tool
+    result. Anything that does not is dropped rather than asserted."""
+    kept, problems = check_answers(state["answers"], state["gathered"])
+    return {"answers": kept, "errors": state["errors"] + problems}
 
 
 def synthesizer(state: AgentState) -> dict:
@@ -148,15 +194,19 @@ def build_graph():
     g = StateGraph(AgentState)
     g.add_node("planner", planner)
     g.add_node("executor", executor)
+    g.add_node("critic", critic)
     g.add_node("synthesizer", synthesizer)
+    g.add_node("verifier", verifier)
 
     g.add_edge(START, "planner")
     # conditional from planner too, so an empty plan skips straight to synthesis
     g.add_conditional_edges("planner", route,
                             {"executor": "executor", "synthesizer": "synthesizer"})
-    g.add_conditional_edges("executor", route,
+    g.add_edge("executor", "critic")          # every step gets verified
+    g.add_conditional_edges("critic", route,
                             {"executor": "executor", "synthesizer": "synthesizer"})
-    g.add_edge("synthesizer", END)
+    g.add_edge("synthesizer", "verifier")      # then the answer itself is verified
+    g.add_edge("verifier", END)
     return g.compile(name="planner_agent")
 
 
@@ -168,6 +218,7 @@ def run_planner(ticker: str, fiscal_year: int | None = None) -> dict:
     final = GRAPH.invoke({
         "ticker": ticker.upper(), "fiscal_year": fiscal_year,
         "plan": [], "gathered": {}, "errors": [], "answers": {},
+        "last_step": None, "verdicts": [],
     })
     # A graph collects failures into state instead of raising, which means a
     # node can fail silently and the caller sees only empty answers. Surface
