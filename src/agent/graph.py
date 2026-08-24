@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 from langgraph.graph import END, START, StateGraph
 from langsmith.wrappers import wrap_anthropic
 
+from src.tools.faults import wrap_tool
 from src.tools.market_data import ToolError, get_balance_sheet, get_financials
 
 load_dotenv()
@@ -34,9 +35,10 @@ MODEL = "claude-haiku-4-5"
 
 # The tools the planner may schedule. Adding a tool here is all it takes for the
 # planner to be able to use it.
+# wrap_tool is a no-op unless fault injection is switched on (M3 Step 2).
 TOOLS = {
-    "fetch_income_statement": get_financials,
-    "fetch_balance_sheet": get_balance_sheet,
+    "fetch_income_statement": wrap_tool(get_financials, "fetch_income_statement"),
+    "fetch_balance_sheet": wrap_tool(get_balance_sheet, "fetch_balance_sheet"),
 }
 
 

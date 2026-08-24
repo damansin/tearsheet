@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 
 from src.agent.graph import run_planner
+from src.tools import faults
 from src.agent.naive import run_naive
 
 BENCHMARK_DIR = Path(__file__).parent / "benchmark"
@@ -44,11 +45,23 @@ def main() -> None:
         help="which agent to run across the benchmark",
     )
     parser.add_argument(
+        "--inject-faults", action="store_true",
+        help="break tools on purpose so recovery has something to recover from",
+    )
+    parser.add_argument("--fault-rate", type=float, default=0.30)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
         "--out", default=str(OUT_PATH),
         help="where to write answers (keep runs side by side for comparison)",
     )
     args = parser.parse_args()
     out_path = Path(args.out)
+
+    if args.inject_faults:
+        faults.CONFIG.enabled = True
+        faults.CONFIG.rate = args.fault_rate
+        faults.CONFIG.seed = args.seed
+        print(f"FAULT INJECTION ON  rate={args.fault_rate}  seed={args.seed}\n")
 
     run = run_naive if args.agent == "naive" else run_planner
 
