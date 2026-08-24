@@ -49,7 +49,11 @@ def main() -> None:
         help="break tools on purpose so recovery has something to recover from",
     )
     parser.add_argument("--fault-rate", type=float, default=0.30)
-    parser.add_argument("--seed", type=int, default=42)
+    # Seed 18 chosen for COVERAGE, not for a favourable score: it is the
+    # lowest seed whose fault mix populates all four quadrants (loud/silent x
+    # transient/permanent) with >=3 each, so every recovery path gets exercised.
+    # Selected from the fault schedule alone, before measuring any agent.
+    parser.add_argument("--seed", type=int, default=18)
     parser.add_argument(
         "--out", default=str(OUT_PATH),
         help="where to write answers (keep runs side by side for comparison)",
@@ -61,6 +65,7 @@ def main() -> None:
         faults.CONFIG.enabled = True
         faults.CONFIG.rate = args.fault_rate
         faults.CONFIG.seed = args.seed
+        faults.reset()   # attempt counters must not leak between runs
         print(f"FAULT INJECTION ON  rate={args.fault_rate}  seed={args.seed}\n")
 
     run = run_naive if args.agent == "naive" else run_planner
