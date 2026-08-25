@@ -13,7 +13,7 @@ provide investment advice.
 **The point of this project is reliability, measured.** Not "here's a demo that
 looks good" — here's a benchmark, a baseline, and the numbers moving.
 
-> 🚧 **Work in progress.** M0–M2 complete; M3 (verification + recovery) next.
+> 🚧 **Work in progress.** M0–M3 complete; M4 (memory + context) next.
 
 ---
 
@@ -22,17 +22,35 @@ looks good" — here's a benchmark, a baseline, and the numbers moving.
 Measured on a 25-company benchmark (130 ground-truth facts pulled from SEC XBRL
 filings, pinned to FY2024).
 
+**On a clean run** (tools behaving):
+
 | Stage | Fact-accuracy | Hallucination rate | Completion |
 |---|---|---|---|
 | **M1 — naive agent (baseline)** | 57.7% | 36.4% | 90.8% |
 | **M2 — planner / executor (LangGraph)** | **96.2%** | **3.8%** | **100.0%** |
-| M3 — verification + recovery | _pending_ | _pending_ | _pending_ |
+
+**Under 30% deliberate tool failure** (M3 — the reliability test):
+
+| Stage | Fact-accuracy | Hallucination rate | Completion |
+|---|---|---|---|
+| M2 agent (no verification, no recovery) | 76.9% | 11.5% | 86.9% |
+| + critic (verification) | 76.9% | **8.3%** | 83.8% |
+| **+ recovery (bounded retry)** | **83.1%** | **7.7%** | **90.0%** |
 
 **M2 in one line:** splitting the agent into planner → executor → synthesizer,
 and forbidding the synthesizer from reporting anything it did not gather, took
 fact-accuracy from **57.7% → 96.2%** and hallucination from **36.4% → 3.8%**.
-Cost of that lift: ~2x tokens, cost, and latency (two LLM calls per company
-instead of one).
+
+**M3 in one line:** a clean run cannot measure reliability — so 30% of tool calls
+are broken on purpose, and verification + recovery claw accuracy back from
+**76.9% → 83.1%** while cutting hallucination **11.5% → 7.7%** (a 33% relative
+reduction) under conditions that break one call in three.
+
+**Why the critic's accuracy is flat but it still matters:** verification converts
+*wrong → missing* (a confident lie becomes an honest gap; zero correct answers
+lost). Recovery then converts *missing → correct*. Neither alone gets there —
+Goldman Sachs' net income came back only because the critic **caught** the
+corruption and retry then **healed** it.
 
 Cost/latency: naive **$0.00108**/company, p50 1.63s · planner **$0.00194**/company,
 p50 4.06s.
@@ -69,13 +87,16 @@ Plus 3 banks (JPM, BAC, GS) fail outright: the tool hard-codes fetching a
 "Gross Profit" row, which banks don't have — one missing row zeroes out the
 whole company.
 
-### Failure modes → what fixes them
+### Failure modes → what fixed them
 
-| # | Failure mode | Share of errors | Fixed by |
+| # | Failure mode | Fixed by | Result |
 |---|---|---|---|
-| 1 | Confabulating facts it never gathered | ~95% | M2 (gather) + M3 (verify) |
-| 2 | Tool rigidity on heterogeneous filings (banks) | 12 facts missing | M2/M3 robustness |
-| 3 | Single-source trust (yfinance vs filing definitions) | 2 facts | M3 cross-checking |
+| 1 | Confabulating facts it never gathered | M2 planner gathers them | cash/equity: 1 correct → 44 |
+| 2 | Tool rigidity on heterogeneous filings (banks) | M2 optional gross profit | banks stopped dying |
+| 3 | Silent corruption (implausible values) | M3 critic | 4/4 caught |
+| 4 | Transient tool failures | M3 bounded retry | 8 facts recovered |
+| 5 | **Subtle corruption (~15% shift)** | **unfixed** | 0/5 caught — needs a second source, which would be circular here |
+| 6 | Single-source definitional mismatch (COP/JPM/UNH) | **unfixed** | same circularity constraint |
 
 Full detail: [`eval/BASELINE.md`](eval/BASELINE.md).
 
@@ -92,6 +113,9 @@ Full detail: [`eval/BASELINE.md`](eval/BASELINE.md).
   loose enough to absorb rounding, tight enough to catch a real misstatement.
 - The **scorer was calibrated against known-verdict fixtures before the agent
   existed**, so a bad score means a bad agent, not a broken measuring stick.
+- **Reliability is tested by breaking things on purpose** — a deterministic fault
+  injector fails 30% of tool calls (loud/silent × transient/permanent), so
+  recovery has something real to recover from and both runs face identical faults.
 - **CI enforces an accuracy floor** (`--min-accuracy`) that exits non-zero on a
   regression, and the floor ratchets up as the metric improves.
 
@@ -102,7 +126,7 @@ python -m venv .venv && .venv/Scripts/activate   # Windows
 pip install -e ".[dev]"
 cp .env.example .env                             # add ANTHROPIC_API_KEY (+ LangSmith keys)
 
-pytest                                           # 20 tests, no network/keys needed
+pytest                                           # 38 tests, no network/keys needed
 python -m src.agent.run --ticker AAPL            # one company
 python eval/run_agent.py --agent planner         # run the benchmark (~$0.05)
 python eval/run_eval.py --answers eval/answers_planner.json
@@ -119,9 +143,10 @@ EDGAR/XBRL** · **LangSmith** (tracing, cost, latency) · pytest + GitHub Action
 ## Project layout
 
 ```
-src/agent/      graph.py = LangGraph planner/executor/synthesizer;
+src/agent/      graph.py = LangGraph planner/executor/critic/recovery/synthesizer
+                critic.py = verification (sanity, cross-field, answer-vs-evidence)
                 naive.py = the M1 baseline, kept for A/B
-src/tools/      yfinance wrappers: income statement + balance sheet
+src/tools/      yfinance wrappers + faults.py (deliberate fault injection)
 eval/benchmark/ 25 companies of SEC-sourced ground truth
 eval/run_eval.py       scorer + CI accuracy gate
 eval/run_agent.py      runs the agent across the benchmark

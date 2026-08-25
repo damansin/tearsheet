@@ -13,7 +13,7 @@
       "unit": "percent"
     },
     "net_margin": {
-      "value": 23.97,
+      "value": 23.98,
       "unit": "percent"
     },
     "cash": {
@@ -39,7 +39,7 @@
       "unit": "percent"
     },
     "net_margin": {
-      "value": 9.29,
+      "value": 9.28,
       "unit": "percent"
     },
     "cash": {
@@ -53,7 +53,7 @@
   },
   "BA": {
     "revenue": {
-      "value": 66517.0,
+      "value": 76494.55,
       "unit": "USD_millions"
     },
     "net_income": {
@@ -65,7 +65,7 @@
       "unit": "percent"
     },
     "net_margin": {
-      "value": -17.76,
+      "value": -15.45,
       "unit": "percent"
     },
     "cash": {
@@ -126,22 +126,6 @@
     }
   },
   "COP": {
-    "revenue": {
-      "value": 54745.0,
-      "unit": "USD_millions"
-    },
-    "net_income": {
-      "value": 9245.0,
-      "unit": "USD_millions"
-    },
-    "gross_margin": {
-      "value": 29.93,
-      "unit": "percent"
-    },
-    "net_margin": {
-      "value": 16.89,
-      "unit": "percent"
-    },
     "cash": {
       "value": 5607.0,
       "unit": "USD_millions"
@@ -196,10 +180,6 @@
     },
     "cash": {
       "value": 6781.0,
-      "unit": "USD_millions"
-    },
-    "equity": {
-      "value": 152318.0,
       "unit": "USD_millions"
     }
   },
@@ -309,7 +289,7 @@
       "unit": "USD_millions"
     },
     "net_income": {
-      "value": 14066.0,
+      "value": 16175.9,
       "unit": "USD_millions"
     },
     "gross_margin": {
@@ -317,7 +297,7 @@
       "unit": "percent"
     },
     "net_margin": {
-      "value": 15.83,
+      "value": 18.21,
       "unit": "percent"
     },
     "cash": {
@@ -331,7 +311,7 @@
   },
   "JPM": {
     "revenue": {
-      "value": 169439.0,
+      "value": 194854.85,
       "unit": "USD_millions"
     },
     "net_income": {
@@ -339,7 +319,7 @@
       "unit": "USD_millions"
     },
     "net_margin": {
-      "value": 34.52,
+      "value": 30.0,
       "unit": "percent"
     },
     "cash": {
@@ -365,7 +345,7 @@
       "unit": "percent"
     },
     "net_margin": {
-      "value": 22.59,
+      "value": 22.6,
       "unit": "percent"
     },
     "cash": {
@@ -391,12 +371,8 @@
       "unit": "percent"
     },
     "net_margin": {
-      "value": 31.72,
+      "value": 31.71,
       "unit": "percent"
-    },
-    "cash": {
-      "value": 1085.0,
-      "unit": "USD_millions"
     },
     "equity": {
       "value": -3796.0,
@@ -451,7 +427,7 @@
       "unit": "USD_millions"
     },
     "equity": {
-      "value": 268477.0,
+      "value": 308748.55,
       "unit": "USD_millions"
     }
   },
@@ -481,32 +457,7 @@
       "unit": "USD_millions"
     }
   },
-  "NVDA": {
-    "revenue": {
-      "value": 60922.0,
-      "unit": "USD_millions"
-    },
-    "net_income": {
-      "value": 29760.0,
-      "unit": "USD_millions"
-    },
-    "gross_margin": {
-      "value": 72.72,
-      "unit": "percent"
-    },
-    "net_margin": {
-      "value": 48.89,
-      "unit": "percent"
-    },
-    "cash": {
-      "value": 7280.0,
-      "unit": "USD_millions"
-    },
-    "equity": {
-      "value": 42978.0,
-      "unit": "USD_millions"
-    }
-  },
+  "NVDA": {},
   "PFE": {
     "revenue": {
       "value": 63627.0,
@@ -547,7 +498,7 @@
       "unit": "percent"
     },
     "net_margin": {
-      "value": 17.7,
+      "value": 17.69,
       "unit": "percent"
     },
     "cash": {
@@ -575,14 +526,6 @@
     "net_margin": {
       "value": -95.52,
       "unit": "percent"
-    },
-    "cash": {
-      "value": 5294.0,
-      "unit": "USD_millions"
-    },
-    "equity": {
-      "value": 6558.0,
-      "unit": "USD_millions"
     }
   },
   "UNH": {
@@ -617,7 +560,7 @@
       "unit": "USD_millions"
     },
     "net_income": {
-      "value": 15511.0,
+      "value": 17837.65,
       "unit": "USD_millions"
     },
     "gross_margin": {
@@ -625,7 +568,7 @@
       "unit": "percent"
     },
     "net_margin": {
-      "value": 2.39,
+      "value": 2.75,
       "unit": "percent"
     },
     "cash": {

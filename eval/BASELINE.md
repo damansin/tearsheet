@@ -1,5 +1,114 @@
 # Baseline - measured results
 
+## M3: verification + recovery, measured UNDER DELIBERATE FAILURE
+
+M2 left accuracy at 96.2% with only 5 facts wrong, so "raise accuracy" was not a
+milestone: 3.8% of headroom, and the 5 errors were only fixable by consulting
+SEC XBRL - which is where our ground truth comes from, so a critic that read it
+would be grading itself against its own answer key.
+
+Worse, the benchmark never tested reliability at all. yfinance behaved on all 25
+companies, so retry/replan would have had nothing to recover from.
+
+So M3 is measured on a different axis: **reliability under injected failure**.
+30% of tool calls are broken on purpose (`--inject-faults --seed 18`), split
+across four quadrants: loud (raises) / silent (returns plausible garbage) x
+transient (heals on retry) / permanent (never heals).
+
+```bash
+python eval/run_agent.py --agent planner --inject-faults --seed 18     --out eval/answers_recovery_faults.json
+python eval/run_eval.py --answers eval/answers_recovery_faults.json
+```
+
+| Under 30% tool failure | Completion | Fact-accuracy | Hallucination |
+|---|---|---|---|
+| M2 agent (no critic, no recovery) | 86.9% | 76.9% | 11.5% |
+| **+ critic** | 83.8% | 76.9% | **8.3%** |
+| **+ critic + recovery** | **90.0%** | **83.1%** | **7.7%** |
+| *(same agent, no faults injected)* | *100%* | *96.2%* | *3.8%* |
+
+**M3 net: accuracy +6.2pp, hallucination -3.8pp (a 33% relative cut) under
+conditions that break one call in three.**
+
+### Why the critic's accuracy is flat - and why that is the win
+
+The critic converts **wrong -> missing**. A caught corruption is discarded, so a
+confident lie becomes an honest gap. The scorer counts both as "not correct", so
+accuracy does not move - but hallucination fell 11.5% -> 8.3% and **zero correct
+answers were lost**.
+
+Recovery then converts **missing -> correct**. That two-step arc is why
+verification and recovery are separate concerns, and it is exactly what the
+numbers show.
+
+### What recovery actually reclaimed (8 facts, 0 lost)
+
+| ticker | facts | fault |
+|---|---|---|
+| AAPL, GOOGL, NKE | cash + equity | loud transient -> retry healed it |
+| GS | net_income + net_margin | silent transient: **the critic caught the corruption, retry then healed it** |
+
+The GS case is the point of the whole milestone: neither component alone gets
+that fact back. Verification without recovery leaves an honest gap; recovery
+without verification never notices anything is wrong, because the tool did not
+raise.
+
+### What the critic catches, and what it cannot
+
+| silent corruption | count | caught |
+|---|---|---|
+| implausible (wrong sign / 10x magnitude) | 4 | **4/4** |
+| subtle (value shifted ~15%) | 5 | **0/5** |
+
+The subtle ones are invisible **by construction**: the tool returns a plausible
+number, the agent faithfully reports it, and self-consistency confirms the answer
+matches the tool. Only a second independent source could catch them, and the only
+one available is our ground-truth source. This blind spot is documented at the
+top of `src/agent/critic.py` rather than papered over.
+
+### Cost of reliability
+
+| | clean M2 | M3 under faults |
+|---|---|---|
+| tokens / company | 783 | 740 |
+| cost / company | $0.00194 | $0.00182 |
+| latency p50 / p95 | 4.06s / 5.75s | 6.07s / 9.58s |
+
+Latency rises ~50%, mostly deliberate retry backoff (1.5s then 3.0s). Tokens and
+cost are flat-to-lower: retries add tool calls, not LLM calls, and companies that
+fail permanently produce shorter outputs.
+
+### Bugs found while building M3 (each one would have produced a false number)
+
+1. **Retry could never succeed.** v1 of the injector keyed its decision on
+   (seed, tool, ticker) only, so a retry got the identical verdict. We would have
+   measured recovery as worthless - a lie caused by our own test rig. Fixed by
+   adding transient/permanent persistence and a private attempt counter.
+2. **A verifier that destroys good data.** The first critic rejected the entire
+   tool result when one field failed, killing 3 correct answers (GS revenue, MCD
+   equity, PG equity). Fixed with field-level rejection.
+3. **Guessed thresholds.** `net_income <= 5x revenue` let GS's 10x corruption
+   through (ratio 2.67). The real maximum in the benchmark is 0.955 -> 2.0.
+   Equity had no rule at all, so CVX's -1,523,180 passed; real max
+   |equity|/revenue is 2.78 (BAC) -> 4.0.
+4. **Retry storm.** Retrying with no backoff tripped yfinance's *real* rate
+   limiter, contaminating a whole run with failures that had nothing to do with
+   the experiment. Retrying without backoff attacks the service you depend on.
+5. **The agent retried its tools but not itself.** A single transient
+   "Connection error" in the synthesizer's LLM call wiped out all 5 facts for
+   Costco, dropping a clean run from 96.2% to 92.3%. Recovery covered tool calls
+   only; the agent's own model calls were unprotected. Fixed with a bounded
+   retry (3 attempts, same backoff) around every LLM call. Found only because a
+   re-run produced a worse number and we chased it instead of re-rolling.
+
+Also nearly shipped: sign rules like "net_income must be positive". BA, INTC and
+RIVN lost money; BA and MCD have negative equity; RIVN's margins are negative.
+Only revenue and cash are never negative in real filings. **For a verifier, a
+false positive is worse than a false negative** - it deletes correct answers.
+
+---
+
+
 ## M2: planner/executor agent (LangGraph) - THE LIFT
 
 ```bash

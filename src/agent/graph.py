@@ -18,6 +18,7 @@ keys it changed.
 
 import json
 import sys
+import time
 from dataclasses import asdict
 from typing import TypedDict
 
@@ -33,6 +34,22 @@ from src.tools.market_data import ToolError, get_balance_sheet, get_financials
 load_dotenv()
 
 MODEL = "claude-haiku-4-5"
+
+# How many times a failed step may be re-run before the agent gives up on it.
+# Bounded on purpose: a permanent fault would otherwise be retried forever,
+# burning tokens for a result that will never arrive. The agent cannot tell
+# transient from permanent in advance -- it spends this budget finding out.
+MAX_RETRIES = 2
+
+# Wait before re-running a failed step, growing with each attempt.
+# Learned the hard way: the first version retried immediately, which turned a
+# handful of injected faults into a burst of extra calls and tripped yfinance's
+# real rate limiter -- so the run failed for reasons that had nothing to do with
+# the experiment. Retrying without backoff attacks the service you depend on.
+RETRY_BACKOFF_SECONDS = 1.5
+
+# The agent's own LLM calls get the same treatment as its tools.
+LLM_MAX_ATTEMPTS = 3
 
 # The tools the planner may schedule. Adding a tool here is all it takes for the
 # planner to be able to use it.
@@ -52,7 +69,9 @@ class AgentState(TypedDict):
     errors: list[str]      # what failed; M3 will act on these, M2 just records
     answers: dict          # final output, the scorer's shape
     last_step: str | None  # which step the critic should inspect
+    last_ok: bool          # did that step produce usable data?
     verdicts: list[dict]   # critic decisions, kept for the trace
+    attempts: dict         # step -> how many retries already spent
 
 
 PLANNER_SYSTEM = (
@@ -93,12 +112,26 @@ def _extract_json(text: str) -> dict:
 
 
 def _ask(system: str, user: str) -> dict:
-    resp = _client().messages.create(
-        model=MODEL, max_tokens=700, system=system,
-        messages=[{"role": "user", "content": user}],
-    )
-    text = next((b.text for b in resp.content if b.type == "text"), "")
-    return _extract_json(text)
+    """One LLM call, with its own bounded retry.
+
+    The recovery node retries failed TOOL calls, but the agent's own LLM calls
+    were unprotected -- and a single transient "Connection error" in the
+    synthesizer wiped out every fact for that company. An agent that retries its
+    tools but not itself has an obvious hole; this closes it."""
+    last = None
+    for attempt in range(LLM_MAX_ATTEMPTS):
+        try:
+            resp = _client().messages.create(
+                model=MODEL, max_tokens=700, system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+            text = next((b.text for b in resp.content if b.type == "text"), "")
+            return _extract_json(text)
+        except Exception as exc:      # transport error, or unparseable reply
+            last = exc
+            if attempt < LLM_MAX_ATTEMPTS - 1:
+                time.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
+    raise last
 
 
 def planner(state: AgentState) -> dict:
@@ -118,13 +151,15 @@ def executor(state: AgentState) -> dict:
     step, *remaining = state["plan"]
     gathered = dict(state["gathered"])
     errors = list(state["errors"])
+    ok = True
     try:
         result = TOOLS[step](state["ticker"], fiscal_year=state["fiscal_year"])
         gathered[step] = asdict(result)
     except ToolError as exc:
         errors.append(f"{step}: {exc}")
+        ok = False
     return {"plan": remaining, "gathered": gathered, "errors": errors,
-            "last_step": step}
+            "last_step": step, "last_ok": ok}
 
 
 def critic(state: AgentState) -> dict:
@@ -158,8 +193,23 @@ def critic(state: AgentState) -> dict:
     gathered = dict(state["gathered"])
     gathered[step] = cleaned
     reasons = "; ".join(verdict.problems)
-    return {"gathered": gathered, "verdicts": verdicts,
+    return {"gathered": gathered, "verdicts": verdicts, "last_ok": False,
             "errors": state["errors"] + [f"{step}: rejected by critic: {reasons}"]}
+
+
+def recovery(state: AgentState) -> dict:
+    """Re-queue a failed step so the executor tries it again.
+
+    Recovery here is RETRY plus bounded give-up. A true fallback (same fact from
+    a different source) is not available with only two tools, and replanning has
+    nothing to revise when every step is required -- so we do not pretend to do
+    either. Retrying is what this failure surface actually supports."""
+    step = state["last_step"]
+    attempts = dict(state["attempts"])
+    attempts[step] = attempts.get(step, 0) + 1
+    time.sleep(RETRY_BACKOFF_SECONDS * attempts[step])   # linear backoff
+    return {"plan": [step] + state["plan"], "attempts": attempts,
+            "errors": state["errors"] + [f"{step}: retry {attempts[step]}/{MAX_RETRIES}"]}
 
 
 def verifier(state: AgentState) -> dict:
@@ -190,11 +240,25 @@ def route(state: AgentState) -> str:
     return "executor" if state["plan"] else "synthesizer"
 
 
+def route_after_critic(state: AgentState) -> str:
+    """Failed step with budget left -> recover. Otherwise carry on.
+
+    The agent does not know whether the failure is transient or permanent; it
+    spends up to MAX_RETRIES finding out, then gives up gracefully (the fact
+    becomes an honest gap rather than an invented number)."""
+    step = state.get("last_step")
+    if step and not state.get("last_ok", True):
+        if state["attempts"].get(step, 0) < MAX_RETRIES:
+            return "recovery"
+    return route(state)
+
+
 def build_graph():
     g = StateGraph(AgentState)
     g.add_node("planner", planner)
     g.add_node("executor", executor)
     g.add_node("critic", critic)
+    g.add_node("recovery", recovery)
     g.add_node("synthesizer", synthesizer)
     g.add_node("verifier", verifier)
 
@@ -203,8 +267,10 @@ def build_graph():
     g.add_conditional_edges("planner", route,
                             {"executor": "executor", "synthesizer": "synthesizer"})
     g.add_edge("executor", "critic")          # every step gets verified
-    g.add_conditional_edges("critic", route,
-                            {"executor": "executor", "synthesizer": "synthesizer"})
+    g.add_conditional_edges("critic", route_after_critic,
+                            {"recovery": "recovery", "executor": "executor",
+                             "synthesizer": "synthesizer"})
+    g.add_edge("recovery", "executor")         # re-queued step goes round again
     g.add_edge("synthesizer", "verifier")      # then the answer itself is verified
     g.add_edge("verifier", END)
     return g.compile(name="planner_agent")
@@ -218,7 +284,7 @@ def run_planner(ticker: str, fiscal_year: int | None = None) -> dict:
     final = GRAPH.invoke({
         "ticker": ticker.upper(), "fiscal_year": fiscal_year,
         "plan": [], "gathered": {}, "errors": [], "answers": {},
-        "last_step": None, "verdicts": [],
+        "last_step": None, "last_ok": True, "verdicts": [], "attempts": {},
     })
     # A graph collects failures into state instead of raising, which means a
     # node can fail silently and the caller sees only empty answers. Surface

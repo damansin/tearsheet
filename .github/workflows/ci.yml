@@ -14,8 +14,12 @@ name: CI
 #     A true live-agent quality gate needs an API key + network + spend, so it
 #     belongs in a manual/nightly tier, not on every push.
 #
-# Threshold is a RATCHET: set just below the current best (M2 planner: 96.2%), raised
-# every time the metric improves, so gains get locked in and can't silently slip.
+# Thresholds are a RATCHET: set just below the current best, raised every time
+# the metric improves, so gains get locked in and can't silently slip.
+#   clean run   96.2% -> floor 0.90
+#   under 30% injected tool failure  83.1% -> floor 0.78
+# The second gate is what protects M3: it would catch a change that quietly
+# broke verification or recovery while leaving the clean run looking fine.
 
 on:
   push:
@@ -39,5 +43,8 @@ jobs:
       - name: Run tests
         run: pytest -q
 
-      - name: Eval accuracy gate (scores committed answers — no API calls)
+      - name: Eval gate — clean run (scores committed answers, no API calls)
         run: python eval/run_eval.py --answers eval/answers_planner.json --min-accuracy 0.90
+
+      - name: Eval gate — under 30% injected tool failure (reliability)
+        run: python eval/run_eval.py --answers eval/answers_recovery_faults.json --min-accuracy 0.78
