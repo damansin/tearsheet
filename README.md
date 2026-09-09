@@ -1,5 +1,7 @@
 # Tearsheet
 
+[![CI](https://github.com/damansin/tearsheet/actions/workflows/ci.yml/badge.svg)](https://github.com/damansin/tearsheet/actions/workflows/ci.yml)
+
 **An eval and reliability harness for LLM agents.**
 
 The question it exists to answer: *how do you know an agent can be trusted?*

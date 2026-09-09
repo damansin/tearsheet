@@ -16,14 +16,19 @@ It is a **research and analysis tool**. It surfaces verified facts. It does **no
 
 ## 2. What it produces (the task)
 
-Input: a company (ticker or name).
-Output: a structured brief containing:
-- Latest financials (revenue, net income, margins, cash, debt)
-- Key ratios computed from that data (P/E, debt-to-equity, gross/operating margin, revenue growth)
-- A short trend summary (revenue/margin direction over recent periods)
-- Risk flags pulled from the company's filings
-- Recent relevant news
-- **A citation for every factual claim**
+Input: a company (ticker + fiscal year).
+
+**What it actually produces**, six facts per company, each traceable to a tool
+result: `revenue`, `net_income`, `gross_margin`, `net_margin`, `cash`, `equity`.
+
+**Scope was cut deliberately, and the reason is the same each time:** the original
+plan also listed P/E and debt ratios, trend summaries, risk flags from filings,
+and recent news. Every one of those was dropped because it could not be *scored*.
+Price-dependent ratios need a pinned price snapshot; risk flags and news have no
+verifiable ground truth to grade against. Adding unmeasurable output to a project
+whose entire point is measurement would have been the wrong trade — a wider brief
+nobody could check. Six checkable facts across 25 companies beats twenty
+uncheckable ones.
 
 ## 3. Why this shape (design logic)
 
@@ -33,18 +38,24 @@ Output: a structured brief containing:
 
 ## 4. Architecture (LangGraph state graph)
 
-- **Planner** — decomposes the goal into a step plan (task graph).
-- **Executor** — runs each step using tools.
-- **Critic / Verifier** — after each step, checks: did it succeed? does the output contradict the data the tools returned (self-consistency)?
-- **Replanner** — on failure or changed state, revises the plan instead of charging ahead.
-- **Memory / state** — carries verified findings across steps without flooding the context window.
-- **Synthesizer** — assembles the final cited brief.
+- **Planner** — decides which tools to call; invented tool names are filtered out.
+- **Executor** — runs the step: cache first, then the real tool. A raise is recorded, not fatal.
+- **Critic** — after each step: is this value *possible*? plausible beside the other data? A clean verdict is what admits it to the cache.
+- **Recovery** — re-queues a failed step, bounded to 2 retries with backoff, then gives up cleanly (an honest blank, never a guess).
+- **Synthesizer** — assembles the answer **from gathered data only**; omit rather than estimate.
+- **Verifier** — every number in the answer must trace to *this run's* tool output, or it is dropped.
 
 ```
-Goal → Planner → Executor → Critic ——ok——> more steps? ——no——> Synthesizer → Brief
-                    ▲           │
-                    └──replan───┘ (on failure)
+START → planner → executor → critic ──ok, steps left──→ executor
+                     ▲          │
+                     │          ├──ok, done──→ synthesizer → verifier → END
+                     └─recovery─┘  (failed, retries left)
 ```
+
+**Replanning was scoped but not built, on evidence.** With two tools and every
+step required, there is nothing for a replanner to revise — no alternative route
+to the same fact. Recovery here is retry plus bounded give-up, and the docs say
+so rather than dressing it up as replanning.
 
 ## 5. The hard part (the depth this project is built to show)
 
@@ -60,36 +71,51 @@ Wire tracing in at M0, not later. Every run emits a trace + metrics: steps taken
 
 ## 7. Stack
 
+*What is actually in use — items dropped along the way are marked, with the reason, because "why didn't you use X" is a fair question.*
+
 - Python 3.11+, venv + pip
-- **LangGraph** — orchestration (state graph + checkpointing)
-- Claude / GPT — planner + critic reasoning; optional cheaper model for simple sub-steps (cost engineering)
-- Tools via **MCP**: `yfinance` (market + fundamentals), SEC EDGAR (filings), a news API, a calculator
-- **PostgreSQL + pgvector** — structured data (companies, runs, scores) *and* vector memory. One DB, double duty. (Vectors not needed until M4 — keep state simple before then.)
-- **FastAPI** — backend; thin viewer for the demo
-- **LangSmith / Phoenix** — observability (use, don't rebuild)
+- **LangGraph** — orchestration (state graph)
+- **Claude Haiku** — planner + synthesizer
+- **yfinance** — the agent's data source
+- **SEC EDGAR / XBRL** — ground truth ONLY. The agent never reads it; that separation is what keeps the eval from being circular.
+- **SQLite** — the verified-fact cache
+- **LangSmith** — observability (use, don't rebuild)
 - **pytest + GitHub Actions** — the CI eval gate
+
+Dropped, deliberately:
+- **PostgreSQL + pgvector** — no query needed it. Runs are 2 tool calls deep; adding a vector DB because the stack list mentioned it would be theatre.
+- **FastAPI viewer** — a good README plus real LangSmith traces is the demo path.
+- **MCP tool wrapping** — direct Python wrappers were enough at two tools.
+- **News API** — the benchmark scores numeric facts against filings; news has no verifiable ground truth, so it could not be measured.
 
 ## 8. Repo structure (proposed — adjust as it stabilizes)
 
 ```
-src/
-  agent/        # planner, executor, critic, replanner, graph definition
-  tools/        # yfinance, edgar, news, calculator (wrapped as MCP/tools)
-  memory/       # state + (later) pgvector
-  observability/# tracing, metrics (latency p50/p95, cost, quality)
-eval/
-  benchmark/    # 20-30 companies + ground-truth facts
-  run_eval.py   # scores completion rate, fact-accuracy, hallucination rate
-api/            # FastAPI app + viewer
+src/            # THE AGENT UNDER TEST
+  agent/        # planner, executor, critic, recovery, synthesizer, graph
+  tools/        # yfinance wrappers + faults.py (fault injection)
+  memory/       # cache.py — SQLite store of VERIFIED facts
+eval/           # THE HARNESS
+  benchmark/    # 25 companies + ground-truth facts from SEC XBRL
+  run_eval.py   # scores completion, fact-accuracy, hallucination + CI gate
+  run_agent.py  # drives the agent across the benchmark
+  resolve_review.py  # human-in-the-loop: resolve, cite, merge
 tests/
 .github/workflows/  # CI eval gate
 ```
+
+Tracing is done with LangSmith decorators at the call sites (`@traceable`,
+`wrap_anthropic`), not in a separate module — there was no `observability/` code
+worth having, so the empty package was removed. `api/` (FastAPI viewer) was
+dropped in M5: a good README plus real LangSmith traces is the demo path.
 
 ## 9. Milestones (full plan)
 
 Detailed *implementation* for each milestone is worked out in conversation when that milestone starts — the descriptions below are scope + "done" criteria, not step-by-step plans.
 
-**M0 — Walking skeleton (thin end-to-end slice)** *(current)*
+**Status: M0–M4 complete and measured; M5 framing done. See README for results.**
+
+**M0 — Walking skeleton (thin end-to-end slice)** `[x]`
 - Goal: prove the whole loop end-to-end on a TINY scale before gold-plating anything. Build the eval scorer + a tiny 2–3 company ground-truth benchmark + repo/observability scaffolding + a dead-simple naive agent — wired together so one company runs start-to-finish and gets scored.
 - Why this shape (chosen over pure benchmark-first): still honors "measure before you trust" — the scorer and ground truth exist *before* the agent is trusted — but you watch the agent actually fail before designing the full benchmark, so you don't curate 20–30 companies blind. De-risks scope, fastest learning.
 - Done when: `run_eval.py` scores a real (bad) agent run on the tiny benchmark; one trace is visible in the observability UI; CI runs the eval.
@@ -154,4 +180,3 @@ Detailed *implementation* for each milestone is worked out in conversation when 
   / `--merge ANSWERS --out MERGED`. Human answers are excluded from scoring by
   default; `--include-human` shows coverage.
 - Tests: `pytest`
-- API: `uvicorn api.main:app --reload`
