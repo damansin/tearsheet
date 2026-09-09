@@ -16,9 +16,11 @@ import argparse
 import json
 import statistics
 import time
+from collections import Counter
 from pathlib import Path
 
-from src.agent.graph import run_planner
+from src.agent import review
+from src.agent.graph import run_planner, run_planner_detailed
 from src.memory import cache
 from src.tools import faults
 from src.agent.naive import run_naive
@@ -39,6 +41,20 @@ def benchmark_targets() -> list[tuple[str, int]]:
         fiscal_year = int(company["period_end"][:4])
         targets.append((company["ticker"], fiscal_year))
     return targets
+
+
+def benchmark_facts() -> dict[str, list[dict]]:
+    """ticker -> the facts the benchmark requires of it.
+
+    The review queue needs these for two reasons: to know which facts are even
+    expected, and to carry the expected UNIT. A reviewer typing 98268 has to
+    know whether that is millions or dollars -- guessing is how a scale error
+    gets into the brief."""
+    out = {}
+    for path in sorted(BENCHMARK_DIR.glob("*.json")):
+        company = json.loads(path.read_text(encoding="utf-8"))
+        out[company["ticker"]] = company["facts"]
+    return out
 
 
 def main() -> None:
@@ -70,6 +86,10 @@ def main() -> None:
         help="empty the cache first, to force a genuinely cold run",
     )
     parser.add_argument(
+        "--review-queue", default=None, metavar="PATH",
+        help="also write every unresolved fact, with WHY, for human review",
+    )
+    parser.add_argument(
         "--out", default=str(OUT_PATH),
         help="where to write answers (keep runs side by side for comparison)",
     )
@@ -86,6 +106,12 @@ def main() -> None:
             "--cache with --inject-faults would mask injected faults with "
             "cached values and inflate the reliability score. Pick one."
         )
+
+    # The naive agent has no critic and no verdicts, so it cannot say WHY a fact
+    # is missing -- and a queue without reasons is just a list of blanks.
+    if args.review_queue and args.agent != "planner":
+        parser.error("--review-queue needs --agent planner (the naive agent "
+                     "produces no diagnostics to explain a gap with)")
 
     if args.cache:
         cache.CONFIG.enabled = True
@@ -109,11 +135,24 @@ def main() -> None:
     failures: list[str] = []
     latencies: list[float] = []
 
+    queue: list[dict] = []
+    required = benchmark_facts() if args.review_queue else {}
+
     wall_start = time.perf_counter()
     for ticker, fiscal_year in benchmark_targets():
         started = time.perf_counter()
         try:
-            answers[ticker] = run(ticker, fiscal_year=fiscal_year)
+            if args.review_queue:
+                # run_planner_detailed deliberately does not raise, so the
+                # diagnostics survive even for a company that produced nothing
+                # -- which is precisely the company most worth reviewing.
+                company, diag = run_planner_detailed(ticker, fiscal_year=fiscal_year)
+                answers[ticker] = company
+                queue.extend(review.build_queue(required[ticker], company, diag))
+                if diag["errors"] and not company:
+                    failures.append(f"{ticker}: no answers survived")
+            else:
+                answers[ticker] = run(ticker, fiscal_year=fiscal_year)
             elapsed = time.perf_counter() - started
             print(f"{ticker} (FY{fiscal_year}): ok  {elapsed:.2f}s")
         except Exception as exc:  # noqa: BLE001 - baseline agent has no recovery
@@ -137,6 +176,14 @@ def main() -> None:
         st = cache.STATS
         print(f"cache    hits={st.hits}  misses={st.misses}  writes={st.writes}"
               f"  hit_rate={st.hit_rate:.0%}  entries={cache.size()}")
+
+    if args.review_queue:
+        Path(args.review_queue).write_text(
+            json.dumps(queue, indent=2) + "\n", encoding="utf-8")
+        print(f"\nreview queue: {len(queue)} unresolved fact(s) -> {args.review_queue}")
+        by_reason = Counter(row["reason"] for row in queue)
+        for reason, count in by_reason.most_common():
+            print(f"  {reason:<20} {count}")
 
     if failures:
         print(f"{len(failures)} agent failure(s):")

@@ -1,5 +1,31 @@
 # Baseline - measured results
 
+## Human in the loop - deliberately UNMEASURED
+
+The escalation path is built and tested end to end: unresolved facts become a
+queue tagged with why each one is open, a reviewer supplies a value and a
+citation (or marks it genuinely unobtainable), and the result merges back in.
+
+**No accuracy number is reported from it, on purpose.**
+
+A human resolving a queue item is a person reading a filing - and the filings
+are where the ground truth comes from. A fully-worked queue therefore reaches
+100% trivially. That number would be real and completely meaningless: it would
+measure the reviewer, not the agent. Same circularity trap as letting the critic
+read the answer key.
+
+So the scorer excludes `source: human` (and `computed_from_human`) **by
+default**, and `--include-human` reports the combined figure explicitly labelled
+as *coverage*, never as agent accuracy. Every headline number elsewhere in this
+file is the agent working unaided.
+
+What is worth claiming here is the mechanism, not a metric: the system knows
+which facts it failed to get and why, and routes exactly those to a person
+instead of guessing or silently dropping them.
+
+---
+
+
 ## M4a: verified-fact cache
 
 A filed fiscal year is immutable - AAPL FY2024 revenue will never change - so a

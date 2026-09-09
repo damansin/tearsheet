@@ -109,6 +109,53 @@ whole company.
 
 Full detail: [`eval/BASELINE.md`](eval/BASELINE.md).
 
+### Human in the loop
+
+Verification turns a confident lie into an honest blank — but a blank is still a
+dead end, and nothing ever goes back to fill it. So every fact the agent failed
+to deliver is collected into a **review queue**, tagged with *why* it is open:
+
+| reason | what the reviewer should do |
+|---|---|
+| `tool_failed` | the tool kept failing after its retries — fix it, or look the number up |
+| `rejected_by_critic` | a value arrived but was impossible — the source is lying; read the filing |
+| `dropped_by_verifier` | the tool had it and the answer didn't survive — a synthesizer bug, not a data gap |
+| `not_gathered` | nothing ever attempted it — a planning gap |
+| `derived` | computed from other facts; fix those instead |
+
+**The agent only escalates where it already admitted it didn't know.** Not "have
+a human check everything" — that would defeat the point of automating any of it.
+Its own uncertainty is the trigger, which is only possible because of the critic
+and the retry budget: *you cannot escalate a failure you never detected.*
+
+It's a queue, not a blocking interrupt. Pausing mid-run to wait for a person is
+right for one interactive session and wrong for a 25-company batch, where the
+whole thing stops dead on company 3.
+
+Two rules, both borrowed from the agent itself:
+
+- **No claim without a citation.** The agent may not report a number it can't
+  trace to a tool result; a human may not enter one they can't trace to a filing.
+  A looser standard for the person makes the human the weakest link in a system
+  built for traceability.
+- **Derived facts are never hand-entered.** Typing in a margin that disagrees
+  with the revenue and net income beside it puts a contradiction into the brief
+  — the exact failure this project exists to prevent. They're recomputed instead.
+
+**And the metric stays honest:** human answers are tagged `source: human`,
+provenance propagates through derived facts, and the scorer **excludes them by
+default**. Otherwise anyone could reach 100% by typing in the answer key — the
+same circularity trap as letting the critic read SEC filings. Combined coverage
+is available behind `--include-human`, clearly labelled as coverage rather than
+agent accuracy.
+
+```bash
+python eval/run_agent.py --agent planner --review-queue eval/review_queue.json
+python eval/resolve_review.py --list        # what needs attention, and why
+python eval/resolve_review.py               # work through it
+python eval/resolve_review.py --merge eval/answers.json --out eval/answers_merged.json
+```
+
 ---
 
 ## How it's measured
@@ -135,7 +182,7 @@ python -m venv .venv && .venv/Scripts/activate   # Windows
 pip install -e ".[dev]"
 cp .env.example .env                             # add ANTHROPIC_API_KEY (+ LangSmith keys)
 
-pytest                                           # 55 tests, no network/keys needed
+pytest                                           # 75 tests, no network/keys needed
 python -m src.agent.run --ticker AAPL            # one company
 python eval/run_agent.py --agent planner         # run the benchmark (~$0.05)
 python eval/run_eval.py --answers eval/answers_planner.json
@@ -160,12 +207,14 @@ EDGAR/XBRL** · **LangSmith** (tracing, cost, latency) · pytest + GitHub Action
 ```
 src/agent/      graph.py = LangGraph planner/executor/critic/recovery/synthesizer
                 critic.py = verification (sanity, cross-field, answer-vs-evidence)
+                review.py = classifies each unresolved fact for human review
                 naive.py = the M1 baseline, kept for A/B
 src/tools/      yfinance wrappers + faults.py (deliberate fault injection)
 src/memory/     cache.py = SQLite cache of VERIFIED facts (written by the critic)
 eval/benchmark/ 25 companies of SEC-sourced ground truth
 eval/run_eval.py       scorer + CI accuracy gate
 eval/run_agent.py      runs the agent across the benchmark
+eval/resolve_review.py the human half of the loop: resolve, cite, merge
 eval/build_ground_truth.py   regenerates ground truth from SEC XBRL
 eval/BASELINE.md       measured results + failure catalogue
 ```

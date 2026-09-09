@@ -74,6 +74,31 @@ def check_fact(truth_fact: dict, answer: dict | None) -> str:
     return "correct" if ok else "wrong"
 
 
+# Answers a person supplied, or that were derived from one. They are EXCLUDED
+# from scoring by default -- see drop_human_answers.
+HUMAN_SOURCES = ("human", "computed_from_human")
+
+
+def drop_human_answers(answers: dict) -> tuple[dict, int]:
+    """Strip human-supplied answers before scoring, and say how many.
+
+    Default-deny on purpose. `check_fact` reads only `value` and `unit`, so a
+    merged file scores perfectly happily with the human answers counted as
+    agent wins -- which would let anyone reach 100% by typing in the answer key.
+    That is the same circularity trap as reading SEC filings in the critic. The
+    metric has to keep meaning 'what the agent did unaided', so the safe
+    behaviour is the default and seeing the combined number takes a flag."""
+    kept, removed = {}, 0
+    for ticker, facts in answers.items():
+        kept[ticker] = {}
+        for name, payload in facts.items():
+            if isinstance(payload, dict) and payload.get("source") in HUMAN_SOURCES:
+                removed += 1
+                continue
+            kept[ticker][name] = payload
+    return kept, removed
+
+
 def score(truth: dict, answers: dict) -> dict:
     """Score all companies; returns per-fact results and the three metrics."""
     results = []
@@ -123,10 +148,21 @@ def main() -> None:
              "Omit to just report. This is what makes CI a gate: a non-zero "
              "exit turns the build red.",
     )
+    parser.add_argument(
+        "--include-human", action="store_true",
+        help="also count human-supplied answers. This is COVERAGE, not agent "
+             "accuracy -- never use it for the CI gate or a headline number.",
+    )
     args = parser.parse_args()
 
     truth = load_ground_truth()
-    answers = json.loads(Path(args.answers).read_text())
+    answers = json.loads(Path(args.answers).read_text(encoding="utf-8"))
+
+    if not args.include_human:
+        answers, removed = drop_human_answers(answers)
+        if removed:
+            print(f"excluded {removed} human-supplied answer(s) from scoring; "
+                  f"pass --include-human to see combined coverage\n")
     scored = score(truth, answers)
     print_report(scored)
 

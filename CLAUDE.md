@@ -145,5 +145,9 @@ Detailed *implementation* for each milestone is worked out in conversation when 
 - Run benchmark/eval: `python eval/run_eval.py`
 - Reuse verified facts (M4a cache): add `--cache` to either runner; `--clear-cache`
   forces a cold run. Refused alongside `--inject-faults`.
+- Human review: `python eval/run_agent.py --review-queue eval/review_queue.json`,
+  then `python eval/resolve_review.py --list` / `--set TICKER:FACT=VALUE --citation ...`
+  / `--merge ANSWERS --out MERGED`. Human answers are excluded from scoring by
+  default; `--include-human` shows coverage.
 - Tests: `pytest`
 - API: `uvicorn api.main:app --reload`

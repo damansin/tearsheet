@@ -1,0 +1,132 @@
+[
+  {
+    "ticker": "COP",
+    "fiscal_year": 2024,
+    "fact": "revenue",
+    "unit": "USD_millions",
+    "reason": "tool_failed",
+    "detail": "injected permanent fault: fetch_income_statement failed for COP",
+    "attempts": 2,
+    "status": "open"
+  },
+  {
+    "ticker": "COP",
+    "fiscal_year": 2024,
+    "fact": "net_income",
+    "unit": "USD_millions",
+    "reason": "tool_failed",
+    "detail": "injected permanent fault: fetch_income_statement failed for COP",
+    "attempts": 2,
+    "status": "open"
+  },
+  {
+    "ticker": "COP",
+    "fiscal_year": 2024,
+    "fact": "net_margin",
+    "unit": "percent",
+    "reason": "derived",
+    "detail": "computed from revenue, net_income; resolve those instead",
+    "attempts": 0,
+    "status": "open"
+  },
+  {
+    "ticker": "CVX",
+    "fiscal_year": 2024,
+    "fact": "equity",
+    "unit": "USD_millions",
+    "reason": "rejected_by_critic",
+    "detail": "equity (-1,523,180.0) implausible vs revenue (193,414.0)",
+    "attempts": 2,
+    "status": "open"
+  },
+  {
+    "ticker": "MCD",
+    "fiscal_year": 2024,
+    "fact": "cash",
+    "unit": "USD_millions",
+    "reason": "rejected_by_critic",
+    "detail": "cash is negative (-10,850.0)",
+    "attempts": 2,
+    "status": "open"
+  },
+  {
+    "ticker": "NVDA",
+    "fiscal_year": 2024,
+    "fact": "revenue",
+    "unit": "USD_millions",
+    "reason": "tool_failed",
+    "detail": "injected permanent fault: fetch_income_statement failed for NVDA",
+    "attempts": 2,
+    "status": "open"
+  },
+  {
+    "ticker": "NVDA",
+    "fiscal_year": 2024,
+    "fact": "net_income",
+    "unit": "USD_millions",
+    "reason": "tool_failed",
+    "detail": "injected permanent fault: fetch_income_statement failed for NVDA",
+    "attempts": 2,
+    "status": "open"
+  },
+  {
+    "ticker": "NVDA",
+    "fiscal_year": 2024,
+    "fact": "net_margin",
+    "unit": "percent",
+    "reason": "derived",
+    "detail": "computed from revenue, net_income; resolve those instead",
+    "attempts": 0,
+    "status": "open"
+  },
+  {
+    "ticker": "NVDA",
+    "fiscal_year": 2024,
+    "fact": "equity",
+    "unit": "USD_millions",
+    "reason": "tool_failed",
+    "detail": "injected permanent fault: fetch_balance_sheet failed for NVDA",
+    "attempts": 2,
+    "status": "open"
+  },
+  {
+    "ticker": "NVDA",
+    "fiscal_year": 2024,
+    "fact": "gross_margin",
+    "unit": "percent",
+    "reason": "tool_failed",
+    "detail": "injected permanent fault: fetch_income_statement failed for NVDA",
+    "attempts": 2,
+    "status": "open"
+  },
+  {
+    "ticker": "NVDA",
+    "fiscal_year": 2024,
+    "fact": "cash",
+    "unit": "USD_millions",
+    "reason": "tool_failed",
+    "detail": "injected permanent fault: fetch_balance_sheet failed for NVDA",
+    "attempts": 2,
+    "status": "open"
+  },
+  {
+    "ticker": "RIVN",
+    "fiscal_year": 2024,
+    "fact": "equity",
+    "unit": "USD_millions",
+    "reason": "tool_failed",
+    "detail": "injected permanent fault: fetch_balance_sheet failed for RIVN",
+    "attempts": 2,
+    "status": "open"
+  },
+  {
+    "ticker": "RIVN",
+    "fiscal_year": 2024,
+    "fact": "cash",
+    "unit": "USD_millions",
+    "reason": "tool_failed",
+    "detail": "injected permanent fault: fetch_balance_sheet failed for RIVN",
+    "attempts": 2,
+    "status": "open"
+  }
+]

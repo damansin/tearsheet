@@ -198,8 +198,13 @@ def critic(state: AgentState) -> dict:
         verdict.ok = False
         verdict.problems += extra.problems
         verdict.bad_fields += extra.bad_fields
+    # bad_fields is recorded, not just the human-readable problems: a reviewer
+    # needs to know WHICH fact was rejected, and parsing that back out of the
+    # message would misfire -- the equity rejection reads "equity (...)
+    # implausible vs revenue (...)", so a substring search would blame revenue.
     verdicts = state["verdicts"] + [
-        {"step": step, "ok": verdict.ok, "problems": verdict.problems}]
+        {"step": step, "ok": verdict.ok, "problems": verdict.problems,
+         "bad_fields": verdict.bad_fields}]
     if verdict.ok:
         # THE CACHE WRITE, and the only one in the codebase. A value is
         # admissible only after it has passed verification. Writing from the
@@ -311,20 +316,46 @@ def build_graph():
 GRAPH = build_graph()
 
 
-def run_planner(ticker: str, fiscal_year: int | None = None) -> dict:
-    """Same contract as run_naive: {fact: {value, unit}} for one company."""
+def run_planner_detailed(ticker: str, fiscal_year: int | None = None) -> tuple[dict, dict]:
+    """Run the graph and return (answers, diagnostics).
+
+    run_planner keeps only the answers, which is all the scorer needs -- but it
+    throws away WHY anything is missing, and that is exactly what a human
+    reviewer needs. A blank because the tool kept failing means "go fix the
+    tool"; a blank because the critic rejected the value means "go read the
+    filing". Same blank, completely different next action.
+
+    This deliberately does NOT raise. run_planner raises when nothing survived,
+    which is right for a scoring run -- but it would also destroy the
+    diagnostics for exactly the companies that failed hardest, which are the
+    ones most worth reviewing. The caller decides what to do with a bad run."""
     final = GRAPH.invoke({
         "ticker": ticker.upper(), "fiscal_year": fiscal_year,
         "plan": [], "gathered": {}, "errors": [], "answers": {},
         "last_step": None, "last_ok": True, "verdicts": [], "attempts": {},
         "from_cache": False,
     })
+    diagnostics = {
+        "ticker": ticker.upper(),
+        "fiscal_year": fiscal_year,
+        "errors": final["errors"],      # what failed, in order
+        "verdicts": final["verdicts"],  # every critic decision, incl. the passes
+        "attempts": final["attempts"],  # retries spent per step
+        "gathered": final["gathered"],  # the evidence that did survive
+    }
+    return final["answers"], diagnostics
+
+
+def run_planner(ticker: str, fiscal_year: int | None = None) -> dict:
+    """Same contract as run_naive: {fact: {value, unit}} for one company."""
+    answers, diagnostics = run_planner_detailed(ticker, fiscal_year)
     # A graph collects failures into state instead of raising, which means a
     # node can fail silently and the caller sees only empty answers. Surface
     # them: warn on partial failure, raise when nothing survived. (M2 makes
     # failures VISIBLE; retry/fallback is M3's job.)
-    if final["errors"]:
-        if not final["answers"]:
-            raise RuntimeError(f"{ticker}: {'; '.join(final['errors'])}")
-        print(f"  warning {ticker}: {'; '.join(final['errors'])}", file=sys.stderr)
-    return final["answers"]
+    errors = diagnostics["errors"]
+    if errors:
+        if not answers:
+            raise RuntimeError(f"{ticker}: {'; '.join(errors)}")
+        print(f"  warning {ticker}: {'; '.join(errors)}", file=sys.stderr)
+    return answers
