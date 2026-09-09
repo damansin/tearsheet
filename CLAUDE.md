@@ -6,7 +6,9 @@ Full project context for Claude Code. This is the single source of truth for wha
 
 ## 1. What this is
 
-A long-horizon multi-agent system that takes a company and autonomously produces a **verified, sourced due-diligence brief**. It plans the research, executes it across financial-data tools, **verifies every step against the source data**, and recovers when steps fail — producing a structured analyst brief where every factual claim is traceable to a source.
+**An eval and reliability harness for LLM agents** — answering *how do you know an agent can be trusted?* Finance is the **test domain, not the product**: it was chosen because financial facts are checkable against filed documents, which is what makes "correct" measurable rather than a matter of opinion. The harness (independent ground truth, a pre-calibrated scorer, fault injection, a CI quality gate) is the instrument; the agent below is what it was pointed at.
+
+The agent under test is a long-horizon multi-agent system that takes a company and autonomously produces a **verified, sourced due-diligence brief**. It plans the research, executes it across financial-data tools, **verifies every step against the source data**, and recovers when steps fail — producing a structured analyst brief where every factual claim is traceable to a source.
 
 It is a **research and analysis tool**. It surfaces verified facts. It does **not** give investment advice, recommendations, or price predictions.
 
