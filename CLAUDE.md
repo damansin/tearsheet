@@ -105,9 +105,11 @@ Detailed *implementation* for each milestone is worked out in conversation when 
 - Goal: detect step failures (loud and silent), recover (retry / fallback / alternative approach), and replan when the plan breaks. Self-consistency checks so output can't contradict tool data.
 - Done when: completion rate jumps materially, the dominant failure modes are catalogued, and recovery is shown to drive the metric up.
 
-**M4 — Memory + context management**
-- Goal: persistent state across steps (and sessions via pgvector); context engineering so longer, multi-part tasks don't degrade.
-- Done when: longer tasks complete reliably and context stays bounded as step count grows.
+**M4 — Reliability plumbing** *(rescoped; original scope deliberately dropped)*
+- Originally: persistent memory + context engineering + pgvector. **Dropped, on evidence.** Runs are 2 tool calls and 2 LLM calls deep — nothing is drowning in transcript, so there is no context problem to engineer and pgvector would be a database added because the stack list mentioned it. "I didn't build it because the data didn't justify it" is the honest answer, and it is only sayable because the metrics were there to check.
+- **M4a — verified-fact cache.** Reuse results that already passed verification, since a filed fiscal year is immutable. The write is issued by the *critic*, never the executor: caching on "the tool didn't throw" would persist the silent corruptions M3 exists to catch. Refused alongside `--inject-faults`. Buys latency, not cost.
+- **M4b — human in the loop.** Every unresolved fact becomes a queue row tagged with *why*, and a person supplies a value **with a citation** or marks it unobtainable. The agent only escalates where it already admitted it didn't know — which is only possible because the critic and retry budget produce honest blanks. Human answers are tagged and **excluded from scoring by default**, so they can never inflate agent accuracy.
+- Done when: both are wired, tested, and the scorer provably reports the same number with and without human contributions. ✅
 
 **M5 — Polish + writeup**
 - Goal: demo, trace viewer, README with the results table filled in, and a blog post telling the headline story.
