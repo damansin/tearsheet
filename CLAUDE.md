@@ -143,5 +143,7 @@ Detailed *implementation* for each milestone is worked out in conversation when 
 - Setup: `python -m venv .venv && source .venv/bin/activate && pip install -e .`
 - Run agent on one company: `python -m src.agent.run --ticker AAPL`
 - Run benchmark/eval: `python eval/run_eval.py`
+- Reuse verified facts (M4a cache): add `--cache` to either runner; `--clear-cache`
+  forces a cold run. Refused alongside `--inject-faults`.
 - Tests: `pytest`
 - API: `uvicorn api.main:app --reload`

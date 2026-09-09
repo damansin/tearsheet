@@ -13,7 +13,8 @@ provide investment advice.
 **The point of this project is reliability, measured.** Not "here's a demo that
 looks good" — here's a benchmark, a baseline, and the numbers moving.
 
-> 🚧 **Work in progress.** M0–M3 complete; M4 (memory + context) next.
+> 🚧 **Work in progress.** M0–M3 complete, plus M4a (verified-fact cache);
+> human-in-the-loop review next.
 
 ---
 
@@ -54,6 +55,14 @@ corruption and retry then **healed** it.
 
 Cost/latency: naive **$0.00108**/company, p50 1.63s · planner **$0.00194**/company,
 p50 4.06s.
+
+**Verified-fact cache** (M4a): a filed fiscal year is immutable, so a result that
+already passed verification can be reused instead of refetched. The cache is
+written by the **critic**, not the executor — caching on "the tool didn't throw"
+would persist the silent corruptions M3 exists to catch and re-serve them
+forever, turning a transient fault into a permanent one. It trades a network
+round trip for a local lookup; the LLM calls still run, so it moves latency, not
+cost. Measurements in [`eval/BASELINE.md`](eval/BASELINE.md).
 
 ### What M2 fixed, and what it did not
 
@@ -126,12 +135,18 @@ python -m venv .venv && .venv/Scripts/activate   # Windows
 pip install -e ".[dev]"
 cp .env.example .env                             # add ANTHROPIC_API_KEY (+ LangSmith keys)
 
-pytest                                           # 38 tests, no network/keys needed
+pytest                                           # 55 tests, no network/keys needed
 python -m src.agent.run --ticker AAPL            # one company
 python eval/run_agent.py --agent planner         # run the benchmark (~$0.05)
 python eval/run_eval.py --answers eval/answers_planner.json
 python eval/build_ground_truth.py                # regenerate ground truth from SEC
+
+python eval/run_agent.py --cache                 # reuse verified results (faster)
+python eval/run_agent.py --cache --clear-cache   # force a cold run for measuring
 ```
+
+`--cache` and `--inject-faults` are refused together: a cached good value would
+silently repair the faults the run exists to measure.
 
 ## Stack
 
@@ -147,6 +162,7 @@ src/agent/      graph.py = LangGraph planner/executor/critic/recovery/synthesize
                 critic.py = verification (sanity, cross-field, answer-vs-evidence)
                 naive.py = the M1 baseline, kept for A/B
 src/tools/      yfinance wrappers + faults.py (deliberate fault injection)
+src/memory/     cache.py = SQLite cache of VERIFIED facts (written by the critic)
 eval/benchmark/ 25 companies of SEC-sourced ground truth
 eval/run_eval.py       scorer + CI accuracy gate
 eval/run_agent.py      runs the agent across the benchmark

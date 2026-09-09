@@ -28,6 +28,7 @@ from langgraph.graph import END, START, StateGraph
 from langsmith.wrappers import wrap_anthropic
 
 from src.agent.critic import check_against_context, check_answers, check_tool_result
+from src.memory import cache
 from src.tools.faults import wrap_tool
 from src.tools.market_data import ToolError, get_balance_sheet, get_financials
 
@@ -72,6 +73,7 @@ class AgentState(TypedDict):
     last_ok: bool          # did that step produce usable data?
     verdicts: list[dict]   # critic decisions, kept for the trace
     attempts: dict         # step -> how many retries already spent
+    from_cache: bool       # did the last step come from the cache, not a tool?
 
 
 PLANNER_SYSTEM = (
@@ -152,6 +154,20 @@ def executor(state: AgentState) -> dict:
     gathered = dict(state["gathered"])
     errors = list(state["errors"])
     ok = True
+
+    # Cache READ. A closed fiscal year is immutable, so a previously verified
+    # result is still correct -- the network round trip buys nothing. Returns
+    # None (and is a complete no-op) whenever the cache is switched off.
+    cached = cache.get(step, state["ticker"], state["fiscal_year"])
+    if cached is not None:
+        gathered[step] = cached
+        # Deliberately still routed through the critic. Re-verifying is pure
+        # Python and effectively free, and it means a cache file that was
+        # hand-edited, or written by an older critic with looser thresholds,
+        # cannot inject a bad value straight into the answer.
+        return {"plan": remaining, "gathered": gathered, "errors": errors,
+                "last_step": step, "last_ok": True, "from_cache": True}
+
     try:
         result = TOOLS[step](state["ticker"], fiscal_year=state["fiscal_year"])
         gathered[step] = asdict(result)
@@ -159,7 +175,7 @@ def executor(state: AgentState) -> dict:
         errors.append(f"{step}: {exc}")
         ok = False
     return {"plan": remaining, "gathered": gathered, "errors": errors,
-            "last_step": step, "last_ok": ok}
+            "last_step": step, "last_ok": ok, "from_cache": False}
 
 
 def critic(state: AgentState) -> dict:
@@ -185,7 +201,23 @@ def critic(state: AgentState) -> dict:
     verdicts = state["verdicts"] + [
         {"step": step, "ok": verdict.ok, "problems": verdict.problems}]
     if verdict.ok:
+        # THE CACHE WRITE, and the only one in the codebase. A value is
+        # admissible only after it has passed verification. Writing from the
+        # executor instead -- on "the call did not throw" -- would persist
+        # silent corruption and re-serve it on every future run, promoting a
+        # transient fault into a permanent one. Nothing unverified gets in.
+        if not state.get("from_cache"):
+            cache.put(step, state["ticker"], state["fiscal_year"],
+                      state["gathered"][step])
         return {"verdicts": verdicts}
+
+    # A CACHED value that fails verification is poison: it would be re-served
+    # on every future run. Evict it; the retry below then refetches for real.
+    if state.get("from_cache"):
+        cache.delete(step, state["ticker"], state["fiscal_year"])
+
+    # A partial verdict caches NOTHING. A record missing the fields the critic
+    # rejected would hit forever and never retry them.
 
     # drop ONLY the offending fields, keeping the rest of the tool's output
     cleaned = {k: v for k, v in state["gathered"][step].items()
@@ -285,6 +317,7 @@ def run_planner(ticker: str, fiscal_year: int | None = None) -> dict:
         "ticker": ticker.upper(), "fiscal_year": fiscal_year,
         "plan": [], "gathered": {}, "errors": [], "answers": {},
         "last_step": None, "last_ok": True, "verdicts": [], "attempts": {},
+        "from_cache": False,
     })
     # A graph collects failures into state instead of raising, which means a
     # node can fail silently and the caller sees only empty answers. Surface

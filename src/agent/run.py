@@ -11,6 +11,7 @@ import json
 
 from src.agent.graph import run_planner
 from src.agent.naive import run_naive
+from src.memory import cache
 
 
 def main() -> None:
@@ -24,7 +25,13 @@ def main() -> None:
         "--fiscal-year", type=int, default=None,
         help="calendar year the fiscal period ends in (e.g. 2024); default latest",
     )
+    parser.add_argument(
+        "--cache", action="store_true",
+        help="reuse previously verified tool results instead of refetching",
+    )
     args = parser.parse_args()
+
+    cache.CONFIG.enabled = args.cache
 
     run = run_naive if args.agent == "naive" else run_planner
     answer = run(args.ticker, fiscal_year=args.fiscal_year)

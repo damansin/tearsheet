@@ -1,5 +1,76 @@
 # Baseline - measured results
 
+## M4a: verified-fact cache
+
+A filed fiscal year is immutable - AAPL FY2024 revenue will never change - so a
+result that has already been verified can be reused instead of refetched. The
+cache is SQLite, keyed on `(tool, ticker, fiscal_year, schema_version)`.
+
+```bash
+python eval/run_agent.py --cache --clear-cache --out /tmp/cold.json   # cold
+python eval/run_agent.py --cache             --out /tmp/warm.json     # warm
+```
+
+| 25 companies, 50 tool calls | cold (empty cache) | warm (100% hits) | delta |
+|---|---|---|---|
+| total wall clock | 108.5s | **95.2s** | **-12.3%** |
+| mean / company | 4.34s | **3.81s** | -0.53s |
+| p50 / p95 | 4.47s / 4.80s | 3.90s / 4.18s | |
+| cache hits / misses | 0 / 50 | 50 / 0 | |
+| fact-accuracy | 96.2% | 96.2% | **unchanged** |
+| hallucination | 3.8% | 3.8% | **unchanged** |
+| LLM cost / company | $0.00194 | $0.00194 | **unchanged** |
+
+**The honest headline: a tool cache buys latency, not cost.** A hit removes a
+yfinance round trip (~0.27s per call), but the planner and synthesizer LLM calls
+still run with byte-identical prompts - so token spend does not move at all. The
+cost line above is unchanged *by construction*, not by luck. Cutting LLM spend
+would need a different cache (the plan itself), which is a separate claim and is
+not made here.
+
+### The design decision that matters: the CRITIC writes, not the executor
+
+The write is issued from the critic node, only on a clean verdict. The obvious
+alternative - cache in the executor as soon as the tool returns - is actively
+worse than having no cache, because M3 proved the tool sometimes returns
+plausible garbage without raising. Caching on "the call did not throw" would
+persist that garbage and re-serve it on every future run: **a transient fault
+promoted to a permanent one.** Nothing unverified is admissible.
+
+Three consequences fall out of that rule:
+
+- **A partial verdict caches nothing.** When the critic drops some fields and
+  keeps others, the step stores no row. A record missing the rejected field
+  would hit forever and never retry it.
+- **Cached values are re-verified on read.** The executor serves the hit but
+  still routes it through the critic. Re-checking is pure Python and effectively
+  free, and it means a hand-edited cache file - or one written by an older
+  critic with looser thresholds - cannot inject a bad value into the answer.
+- **A cached value that fails verification is evicted**, and the existing M3
+  retry path then refetches it from the real tool.
+
+### `--cache` and `--inject-faults` are mutually exclusive, by refusal
+
+A cached good value would satisfy a step whose tool was supposed to fail,
+silently repairing the very faults the run exists to measure. The reliability
+number would rise without the agent having recovered from anything. The harness
+refuses the combination with an error rather than documenting the hazard in a
+comment nobody reads.
+
+### Side finding: the synthesizer does arithmetic, and it is not deterministic
+
+Cold and warm runs produced **byte-identical raw facts** (revenue, net_income,
+cash, equity - 0 differences across 25 companies), confirming the cache returns
+exactly what the tool returned. But 9 `net_margin` values differed by 0.01pp
+(AAPL 23.97 vs 23.98, META 37.89 vs 37.91). That is the LLM performing the
+division itself and rounding inconsistently - pre-existing nondeterminism the
+cache merely made visible by holding everything else fixed. `net_margin` is a
+derived value and should be computed in Python, not asked of a model. Logged,
+not fixed: it is within the +/-0.5pp scoring tolerance so it moves no metric.
+
+---
+
+
 ## M3: verification + recovery, measured UNDER DELIBERATE FAILURE
 
 M2 left accuracy at 96.2% with only 5 facts wrong, so "raise accuracy" was not a
